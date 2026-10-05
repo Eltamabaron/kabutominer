@@ -334,9 +334,9 @@ app.post('/api/admin/ban_user', (req, res) => {
 });
 
 // SERVIR EL FRONTEND EN PRODUCCIÓN (LA MAGIA PARA LA NUBE)
-app.use(express.static(path.join(__dirname, '../juego-kabuto/dist')));
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, '../juego-kabuto/dist/index.html'));
+app.use(express.static(path.join(__dirname, '../kabuto-game/dist')));
+app.use((req, res) => {
+  res.sendFile(path.join(__dirname, '../kabuto-game/dist/index.html'));
 });
 
 app.listen(PORT, () => console.log(`🧠 Backend de Kabuto corriendo en http://localhost:${PORT}`));
