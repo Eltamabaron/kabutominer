@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
 import './App.css';
 
-const API_URL = '/api'; // CAMBIO PARA LA NUBE: Usa la misma URL del servidor
+const API_URL = '/api';
 const ADMIN_ID = '1159596878'; 
 
 const KABUTO_PRICE_USD = 0.001; 
-const MINING_MULTIPLIER = 0.0000015; 
+const MINING_MULTIPLIER = 0.00015; // 🚀 VELOCIDAD AUMENTADA 100x
 const REQUIRED_VIP_REFERRALS = 6; 
 const MIN_WITHDRAWAL_USD = 5; 
 const WITHDRAWAL_FEE = 0.5; 
@@ -362,6 +362,7 @@ function App() {
 
   const tasks = [
     { id: 'tg_channel', name: 'Únete a nuestro Canal', reward: 100, link: 'https://t.me/kabuto_payments', icon: '📢' },
+    { id: 'tg_community', name: 'Únete a Kabuto Game Community', reward: 150, link: 'https://t.me/kabutogamecommunity', icon: '👥' },
     { id: 'daily_login', name: 'Login Diario', reward: 50, link: null, icon: '📅' },
     { id: 'visit_web', name: 'Visita nuestro Patrocinador', reward: 200, link: 'https://example.com', icon: '🌐' }
   ];
