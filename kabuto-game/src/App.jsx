@@ -2,16 +2,16 @@ import { useState, useEffect, useRef } from 'react';
 import './App.css';
 
 const API_URL = '/api';
-const ADMIN_ID = '1159596878'; 
+const ADMIN_ID = '1159596878'; // Tu ID real de Telegram
 
 const KABUTO_PRICE_USD = 0.001; 
-const MINING_MULTIPLIER = 0.00015; // 🚀 VELOCIDAD AUMENTADA 100x
+const MINING_MULTIPLIER = 0.00015; 
 const REQUIRED_VIP_REFERRALS = 6; 
 const MIN_WITHDRAWAL_USD = 5; 
 const WITHDRAWAL_FEE = 0.5; 
 
 function App() {
-  const [user, setUser] = useState({ telegram_id: '1159596878', first_name: 'Admin', level: 1, is_vip: 0, isAdmin: false });
+  const [user, setUser] = useState({ telegram_id: 'local_test_user', first_name: 'Jugador', level: 1, is_vip: 0, isAdmin: false });
   const [poolWallet, setPoolWallet] = useState(0);
   const [holdingWallet, setHoldingWallet] = useState(0);
   const [teamWallet, setTeamWallet] = useState(0);
@@ -25,7 +25,7 @@ function App() {
   const [showWithdrawBox, setShowWithdrawBox] = useState(false);
   const [withdrawAddress, setWithdrawAddress] = useState('');
   const [withdrawAmount, setWithdrawAmount] = useState('');
-  const [withdrawCurrency, setWithdrawCurrency] = useState('TON');
+  const [withdrawCurrency, setWithdrawCurrency] = useState('USDT'); // 'USDT' o 'LTC'
 
   const [showAdminWithdrawBox, setShowAdminWithdrawBox] = useState(false);
   const [adminWithdrawAmount, setAdminWithdrawAmount] = useState('');
@@ -72,8 +72,9 @@ function App() {
   };
 
   useEffect(() => {
-    let tgId = '1159596878'; 
-    let tgName = 'Admin';
+    // ARREGLO: Ya no forzamos tu ID. Tomamos la real de Telegram.
+    let tgId = 'local_test_user'; 
+    let tgName = 'Jugador';
     let refBy = null;
     let botUsername = 'Kabutominer_bot'; 
 
@@ -101,7 +102,7 @@ function App() {
     .then(res => res.json())
     .then(data => {
       if (data && data.telegram_id) {
-        const isAdmin = data.telegram_id === ADMIN_ID;
+        const isAdmin = data.telegram_id === ADMIN_ID; // Solo tú verás el panel
         setUser({ telegram_id: data.telegram_id, first_name: data.first_name, level: 1, is_vip: data.is_vip, isAdmin });
         setHoldingWallet(Number(data.holding_wallet) || 0);
         setPoolWallet(Number(data.pool_wallet) || 0);
@@ -123,7 +124,7 @@ function App() {
   }, [user.isAdmin, adminView]);
 
   useEffect(() => {
-    if (user.telegram_id && (!user.isAdmin || !adminView)) {
+    if (user.telegram_id && user.telegram_id !== 'local_test_user' && (!user.isAdmin || !adminView)) {
       const interval = setInterval(() => fetchReferrals(user.telegram_id), 10000);
       return () => clearInterval(interval);
     }
@@ -138,7 +139,7 @@ function App() {
 
   useEffect(() => {
     const saveInterval = setInterval(() => {
-      if (user.telegram_id && (!user.isAdmin || !adminView)) {
+      if (user.telegram_id && user.telegram_id !== 'local_test_user' && (!user.isAdmin || !adminView)) {
         fetch(`${API_URL}/user/save`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -165,6 +166,9 @@ function App() {
   const currentLevel = Math.floor(hashPower / 100) + 1;
   const nextLevelCost = currentLevel * 500;
   const nextLevelHash = currentLevel * 50;
+  
+  // Conteo de referidos
+  const totalReferrals = referrals.length;
   const activeVipReferrals = referrals.filter(r => r.is_vip === 1).length;
   const canWithdraw = user.is_vip && activeVipReferrals >= REQUIRED_VIP_REFERRALS;
 
@@ -205,13 +209,13 @@ function App() {
     fetch(`${API_URL}/create_plisio_invoice`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ upgrade_name: upgrade.name, amount_ton: upgrade.cost_ton, telegram_id: user.telegram_id })
+      body: JSON.stringify({ upgrade_name: upgrade.name, amount_usd: upgrade.cost_usd, telegram_id: user.telegram_id })
     })
     .then(res => res.json())
     .then(data => {
       if (data.url) {
         window.open(data.url, '_blank');
-        setPaymentInfo({ upgrade_name: upgrade.name, amount_ton: upgrade.cost_ton, hashAdd: upgrade.hashAdd });
+        setPaymentInfo({ upgrade_name: upgrade.name, amount_usd: upgrade.cost_usd, hashAdd: upgrade.hashAdd });
       } else {
         showModal('Error', data.error || 'No se pudo generar la factura.', 'error');
       }
@@ -222,7 +226,7 @@ function App() {
     fetch(`${API_URL}/user/activate_vip`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ telegram_id: user.telegram_id, first_name: user.first_name, amount_ton: paymentInfo.amount_ton })
+      body: JSON.stringify({ telegram_id: user.telegram_id, first_name: user.first_name, amount_usd: paymentInfo.amount_usd })
     })
     .then(res => res.json())
     .then(data => {
@@ -255,10 +259,10 @@ function App() {
 
   const validateAddress = (address, currency) => {
     if (!address) return false;
-    if (currency === 'TON') {
-      return /^(U|E)[A-Za-z0-9_-]{46,48}$/.test(address);
-    } else if (currency === 'USDT') {
+    if (currency === 'USDT') {
       return /^T[A-Za-z0-9]{33}$/.test(address);
+    } else if (currency === 'LTC') {
+      return /^(L|M|ltc1)[A-Za-z0-9]{20,44}$/.test(address);
     }
     return false;
   };
@@ -267,7 +271,7 @@ function App() {
     if (!withdrawAddress || !withdrawAmount) return showModal('Error', 'Ingresa tu dirección y el monto.', 'error');
     
     if (!validateAddress(withdrawAddress, withdrawCurrency)) {
-      return showModal('Dirección Inválida', `La dirección de ${withdrawCurrency} no tiene un formato válido. Verifica los caracteres y la longitud.`, 'error');
+      return showModal('Dirección Inválida', `La dirección de ${withdrawCurrency} no tiene un formato válido.`, 'error');
     }
 
     const usdToWithdraw = parseFloat(withdrawAmount);
@@ -299,7 +303,6 @@ function App() {
   const handleAdminWithdraw = () => {
     const amount = parseFloat(adminWithdrawAmount);
     if (!amount || amount <= 0) return showModal('Error', 'Ingresa un monto válido.', 'error');
-    
     if (amount > adminStats.adminProfitAvailable) return showModal('Error', 'No puedes retirar más de tu ganancia disponible.', 'error');
 
     fetch(`${API_URL}/admin/withdraw_profit`, {
@@ -331,12 +334,10 @@ function App() {
 
   const handleClaimTask = (task) => {
     if (claimedTasks.includes(task.id)) return showModal('Ya reclamado', 'Ya recibiste la recompensa de esta tarea.', 'error');
-    
     if (task.link) {
       if (window.Telegram && window.Telegram.WebApp) window.Telegram.WebApp.openTelegramLink(task.link);
       else window.open(task.link, '_blank');
     }
-
     fetch(`${API_URL}/user/claim_task`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ telegram_id: user.telegram_id, task_id: task.id })
@@ -353,11 +354,12 @@ function App() {
     });
   };
 
+  // Paquetes en USD (desde 1 USD)
   const realUpgrades = [
-    { id: 'real1', name: 'Minero Diamante', cost_ton: 4, hashAdd: 1000, image: '/vip-diamond.png' },
-    { id: 'real2', name: 'Minero Legendario', cost_ton: 10, hashAdd: 5000, image: '/vip-dragon.png' },
-    { id: 'real3', name: 'Minero Galáctico', cost_ton: 20, hashAdd: 10000, image: '/vip-galaxy.png' },
-    { id: 'real4', name: 'Minero Cósmico', cost_ton: 50, hashAdd: 20000, image: '/vip-cosmic.png' }
+    { id: 'real1', name: 'Minero Diamante', cost_usd: 1, hashAdd: 1000, image: '/vip-diamond.png' },
+    { id: 'real2', name: 'Minero Legendario', cost_usd: 5, hashAdd: 5000, image: '/vip-dragon.png' },
+    { id: 'real3', name: 'Minero Galáctico', cost_usd: 10, hashAdd: 10000, image: '/vip-galaxy.png' },
+    { id: 'real4', name: 'Minero Cósmico', cost_usd: 20, hashAdd: 20000, image: '/vip-cosmic.png' }
   ];
 
   const tasks = [
@@ -492,14 +494,14 @@ function App() {
           </div>
           <div className="divider"></div>
           <h2 className="shop-title">MEJORAS VIP</h2>
-          <p className="shop-subtitle">Desbloquea poder máximo y habilita retiros pagando con TON</p>
+          <p className="shop-subtitle">Desbloquea poder máximo y habilita retiros (Elige tu cripto en el pago)</p>
           {realUpgrades.map(up => (
             <div key={up.id} className="upgrade-card vip-card">
               <div className="upgrade-info">
                 <img src={up.image} alt={up.name} className="upgrade-emoji" />
                 <div><strong>{up.name}</strong><span className="upgrade-profit">+{up.hashAdd} H/s</span></div>
               </div>
-              <button className="buy-btn vip-btn" onClick={() => handleBuyReal(up)}>{up.cost_ton} TON</button>
+              <button className="buy-btn vip-btn" onClick={() => handleBuyReal(up)}>{up.cost_usd} USD</button>
             </div>
           ))}
         </div>
@@ -509,8 +511,8 @@ function App() {
         <div className="payment-modal-overlay">
           <div className="payment-modal">
             <h3>Pago de {paymentInfo.upgrade_name}</h3>
-            <p>Se ha abierto la página de Plisio para que pagues <strong>{paymentInfo.amount_ton} TON</strong>.</p>
-            <p className="payment-warning">Una vez que hayas hecho el pago en Plisio, presiona el botón de abajo para activar tu VIP.</p>
+            <p>Se ha abierto la página de Plisio para que pagues <strong>{paymentInfo.amount_usd} USD</strong>.</p>
+            <p className="payment-warning">Allí podrás elegir pagar con TON, USDT, LTC, BNB, etc. Presiona el botón cuando hayas pagado.</p>
             <button className="claim-btn vip-btn" onClick={confirmMockPayment} style={{marginTop: '20px'}}>Ya pagué (Activar VIP)</button>
             <button className="claim-btn" onClick={() => setPaymentInfo(null)} style={{marginTop: '10px', background: '#555'}}>Cerrar</button>
           </div>
@@ -554,7 +556,8 @@ function App() {
             <input type="text" value={referralLink} readOnly className="ref-input" />
             <button className="buy-btn" onClick={copyLink}>Copiar</button>
           </div>
-          <h3 className="friends-title">AMIGOS VIP ({activeVipReferrals}/{REQUIRED_VIP_REFERRALS})</h3>
+          {/* CONTEO TOTAL DE REFERIDOS */}
+          <h3 className="friends-title">TUS AMIGOS: {totalReferrals} (VIP: {activeVipReferrals}/{REQUIRED_VIP_REFERRALS})</h3>
           {referrals.length === 0 ? <p className="no-friends">Aún no has invitado a nadie. ¡Comparte tu enlace!</p> : referrals.map((ref) => (
             <div key={ref.telegram_id} className="upgrade-card">
               <div className="upgrade-info">
@@ -598,9 +601,10 @@ function App() {
                 <h3>Retirar Ganancias</h3>
                 <p>Saldo disponible: <strong>${(holdingWallet * KABUTO_PRICE_USD).toFixed(2)} USD</strong> ({holdingWallet.toFixed(2)} $KABUTO)</p>
                 
+                {/* SELECTOR DE MONEDA DE RETIRO: USDT O LTC */}
                 <div className="currency-selector">
-                  <button className={withdrawCurrency === 'TON' ? 'active' : ''} onClick={() => setWithdrawCurrency('TON')}>TON</button>
                   <button className={withdrawCurrency === 'USDT' ? 'active' : ''} onClick={() => setWithdrawCurrency('USDT')}>USDT (TRC20)</button>
+                  <button className={withdrawCurrency === 'LTC' ? 'active' : ''} onClick={() => setWithdrawCurrency('LTC')}>Litecoin (LTC)</button>
                 </div>
 
                 <p className="payment-warning">Mínimo: {MIN_WITHDRAWAL_USD} USD | Comisión: {WITHDRAWAL_FEE} USD</p>

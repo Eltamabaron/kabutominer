@@ -1,11 +1,11 @@
 const express = require('express');
 const cors = require('cors');
-const path = require('path'); // Necesario para encontrar la carpeta del frontend
+const path = require('path');
 const Database = require('better-sqlite3');
 const axios = require('axios');
 
 const app = express();
-const PORT = process.env.PORT || 3001; // Render nos asignará el puerto aquí
+const PORT = process.env.PORT || 3001;
 
 app.use(cors());
 app.use(express.json());
@@ -17,6 +17,8 @@ const KABUTO_PRICE_USD = 0.001;
 
 const TASK_REWARDS = {
   'tg_channel': 100,
+  'tg_community': 150,
+  'daily_login': 50,
   'visit_web': 200
 };
 
@@ -62,8 +64,8 @@ addColumnIfNotExists('claimed_tasks', 'TEXT DEFAULT ""');
 addColumnIfNotExists('last_seen', 'DATETIME DEFAULT CURRENT_TIMESTAMP');
 
 async function postPaymentToChannel(userName, amount, txHash) {
-  const explorerUrl = `https://tonscan.org/tx/${txHash}`;
-  const message = `✅ *PAGO VERIFICADO*\n\n👤 *Usuario:* ${userName}\n💰 *Monto:* ${amount} TON\n🆔 *Tx Hash:* [Ver transacción en la blockchain](${explorerUrl})\n\n¡Felicidades por tu activación VIP en Kabuto Miner! 🪲`;
+  const explorerUrl = `https://tonscan.org/tx/${txHash}`; // Por defecto TON, pero el hash sirve igual
+  const message = `✅ *PAGO VERIFICADO*\n\n👤 *Usuario:* ${userName}\n💰 *Monto:* ${amount} USD\n🆔 *Tx Hash:* [Ver transacción en la blockchain](${explorerUrl})\n\n¡Felicidades por tu activación VIP en Kabuto Miner! 🪲`;
   const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
   try { await axios.post(url, { chat_id: CHANNEL_USERNAME, text: message, parse_mode: 'Markdown', disable_web_page_preview: false }); } catch (e) {}
 }
@@ -76,10 +78,15 @@ async function postNewUserToChannel(userName, userId) {
 
 async function processPlisioWithdrawal(userName, amountUsd, currency, address) {
   try {
-    let cryptoPriceUsd = 1;
-    if (currency === 'TON') {
-      const priceRes = await axios.get('https://api.coingecko.com/api/v3/simple/price?ids=the-open-network&vs_currencies=usd');
-      cryptoPriceUsd = priceRes.data['the-open-network'].usd;
+    let cryptoPriceUsd = 1; // Para USDT el precio es 1
+    let coingeckoId = '';
+
+    if (currency === 'TON') coingeckoId = 'the-open-network';
+    else if (currency === 'LTC') coingeckoId = 'litecoin';
+
+    if (coingeckoId) {
+      const priceRes = await axios.get(`https://api.coingecko.com/api/v3/simple/price?ids=${coingeckoId}&vs_currencies=usd`);
+      cryptoPriceUsd = priceRes.data[coingeckoId].usd;
     }
 
     const cryptoAmount = (amountUsd / cryptoPriceUsd).toFixed(8);
@@ -87,7 +94,7 @@ async function processPlisioWithdrawal(userName, amountUsd, currency, address) {
     const plisioRes = await axios.get('https://plisio.net/api/v1/withdraw', {
       params: {
         api_key: PLISIO_API_KEY,
-        currency: currency,
+        currency: currency, // 'USDT', 'LTC', o 'TON'
         to: address,
         amount: cryptoAmount
       }
@@ -95,7 +102,10 @@ async function processPlisioWithdrawal(userName, amountUsd, currency, address) {
 
     if (plisioRes.data && plisioRes.data.status === 'success') {
       const txHash = plisioRes.data.data.tx_id || plisioRes.data.data.id;
-      const explorerUrl = currency === 'TON' ? `https://tonscan.org/tx/${txHash}` : `https://tronscan.org/#/transaction/${txHash}`;
+      let explorerUrl = '';
+      if (currency === 'TON') explorerUrl = `https://tonscan.org/tx/${txHash}`;
+      else if (currency === 'LTC') explorerUrl = `https://blockchair.com/litecoin/transaction/${txHash}`;
+      else if (currency === 'USDT') explorerUrl = `https://tronscan.org/#/transaction/${txHash}`;
       
       const message = `💸 *RETIRO COMPLETADO*\n\n👤 *Usuario:* ${userName}\n💰 *Monto:* ${amountUsd} USD (${cryptoAmount} ${currency})\n🔗 *Dirección:* \`${address}\`\n🆔 *Tx Hash:* [Ver transacción en la blockchain](${explorerUrl})\n\n¡Pago procesado automáticamente vía Plisio! 🪲`;
       const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
@@ -201,25 +211,29 @@ app.post('/api/user/claim_team', (req, res) => {
 });
 
 app.post('/api/user/activate_vip', async (req, res) => {
-  const { telegram_id, first_name, amount_ton } = req.body;
+  const { telegram_id, first_name, amount_usd } = req.body;
   if (!telegram_id) return res.status(400).json({ error: 'Falta telegram_id' });
 
-  db.prepare('UPDATE users SET is_vip = 1, total_invested = total_invested + ? WHERE telegram_id = ?').run(amount_ton, telegram_id);
+  db.prepare('UPDATE users SET is_vip = 1, total_invested = total_invested + ? WHERE telegram_id = ?').run(amount_usd, telegram_id);
   const fakeHash = '0x' + Array.from({length: 64}, () => '0123456789abcdef'[Math.floor(Math.random() * 16)]).join('');
   
-  try { await postPaymentToChannel(first_name || 'Usuario', amount_ton, fakeHash); } catch (e) {}
+  try { await postPaymentToChannel(first_name || 'Usuario', amount_usd, fakeHash); } catch (e) {}
 
   const user = db.prepare('SELECT * FROM users WHERE telegram_id = ?').get(telegram_id);
   res.json({ status: 'OK', user, txHash: fakeHash });
 });
 
+// CAMBIO: Factura en USD para que Plisio deje elegir la moneda en el checkout
 app.post('/api/create_plisio_invoice', async (req, res) => {
-  const { upgrade_name, amount_ton, telegram_id } = req.body;
+  const { upgrade_name, amount_usd, telegram_id } = req.body;
   try {
     const response = await axios.get('https://api.plisio.net/api/v1/invoices/new', {
       params: {
-        api_key: PLISIO_API_KEY, amount: amount_ton, currency: 'TON',
-        order_name: upgrade_name, order_number: `${telegram_id}-${Date.now()}`,
+        api_key: PLISIO_API_KEY, 
+        amount: amount_usd, 
+        currency: 'USD', // Plisio acepta USD y convierte en la página de pago
+        order_name: upgrade_name, 
+        order_number: `${telegram_id}-${Date.now()}`,
         source_url: 'https://telegra.ph/Kabuto-Miner-Game-10-02'
       }
     });
@@ -333,7 +347,6 @@ app.post('/api/admin/ban_user', (req, res) => {
   res.json({ status: 'OK', message: ban_status ? 'Usuario baneado' : 'Usuario desbaneado' });
 });
 
-// SERVIR EL FRONTEND EN PRODUCCIÓN (LA MAGIA PARA LA NUBE)
 app.use(express.static(path.join(__dirname, '../kabuto-game/dist')));
 app.use((req, res) => {
   res.sendFile(path.join(__dirname, '../kabuto-game/dist/index.html'));
