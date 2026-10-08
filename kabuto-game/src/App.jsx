@@ -75,7 +75,7 @@ function App() {
     let tgId = '1159596878'; 
     let tgName = 'Admin';
     let refBy = null;
-    let botUsername = 'kabuto_miner_bot'; 
+    let botUsername = 'Kabutominer_bot'; 
 
     if (window.Telegram && window.Telegram.WebApp) {
       window.Telegram.WebApp.ready();
