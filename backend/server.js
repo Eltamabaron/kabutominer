@@ -64,8 +64,8 @@ addColumnIfNotExists('claimed_tasks', 'TEXT DEFAULT ""');
 addColumnIfNotExists('last_seen', 'DATETIME DEFAULT CURRENT_TIMESTAMP');
 
 async function postPaymentToChannel(userName, amount, txHash) {
-  const explorerUrl = `https://tonscan.org/tx/${txHash}`; // Por defecto TON, pero el hash sirve igual
-  const message = `✅ *PAGO VERIFICADO*\n\n👤 *Usuario:* ${userName}\n💰 *Monto:* ${amount} USD\n🆔 *Tx Hash:* [Ver transacción en la blockchain](${explorerUrl})\n\n¡Felicidades por tu activación VIP en Kabuto Miner! 🪲`;
+  const explorerUrl = `https://tonscan.org/tx/${txHash}`;
+  const message = `✅ *PAGO VERIFICADO*\n\n👤 *Usuario:* ${userName}\n💰 *Monto:* ${amount} USDT\n🆔 *Tx Hash:* [Ver transacción en la blockchain](${explorerUrl})\n\n¡Felicidades por tu activación VIP en Kabuto Miner! 🪲`;
   const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
   try { await axios.post(url, { chat_id: CHANNEL_USERNAME, text: message, parse_mode: 'Markdown', disable_web_page_preview: false }); } catch (e) {}
 }
@@ -78,7 +78,7 @@ async function postNewUserToChannel(userName, userId) {
 
 async function processPlisioWithdrawal(userName, amountUsd, currency, address) {
   try {
-    let cryptoPriceUsd = 1; // Para USDT el precio es 1
+    let cryptoPriceUsd = 1;
     let coingeckoId = '';
 
     if (currency === 'TON') coingeckoId = 'the-open-network';
@@ -94,7 +94,7 @@ async function processPlisioWithdrawal(userName, amountUsd, currency, address) {
     const plisioRes = await axios.get('https://plisio.net/api/v1/withdraw', {
       params: {
         api_key: PLISIO_API_KEY,
-        currency: currency, // 'USDT', 'LTC', o 'TON'
+        currency: currency,
         to: address,
         amount: cryptoAmount
       }
@@ -223,7 +223,7 @@ app.post('/api/user/activate_vip', async (req, res) => {
   res.json({ status: 'OK', user, txHash: fakeHash });
 });
 
-// CAMBIO: Factura en USD para que Plisio deje elegir la moneda en el checkout
+// CAMBIO: Factura en USDT
 app.post('/api/create_plisio_invoice', async (req, res) => {
   const { upgrade_name, amount_usd, telegram_id } = req.body;
   try {
@@ -231,7 +231,7 @@ app.post('/api/create_plisio_invoice', async (req, res) => {
       params: {
         api_key: PLISIO_API_KEY, 
         amount: amount_usd, 
-        currency: 'USD', // Plisio acepta USD y convierte en la página de pago
+        currency: 'USDT', // Plisio acepta USDT y deja elegir la moneda en el checkout
         order_name: upgrade_name, 
         order_number: `${telegram_id}-${Date.now()}`,
         source_url: 'https://telegra.ph/Kabuto-Miner-Game-10-02'

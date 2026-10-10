@@ -25,7 +25,7 @@ function App() {
   const [showWithdrawBox, setShowWithdrawBox] = useState(false);
   const [withdrawAddress, setWithdrawAddress] = useState('');
   const [withdrawAmount, setWithdrawAmount] = useState('');
-  const [withdrawCurrency, setWithdrawCurrency] = useState('USDT'); // 'USDT' o 'LTC'
+  const [withdrawCurrency, setWithdrawCurrency] = useState('USDT');
 
   const [showAdminWithdrawBox, setShowAdminWithdrawBox] = useState(false);
   const [adminWithdrawAmount, setAdminWithdrawAmount] = useState('');
@@ -72,7 +72,6 @@ function App() {
   };
 
   useEffect(() => {
-    // ARREGLO: Ya no forzamos tu ID. Tomamos la real de Telegram.
     let tgId = 'local_test_user'; 
     let tgName = 'Jugador';
     let refBy = null;
@@ -102,7 +101,7 @@ function App() {
     .then(res => res.json())
     .then(data => {
       if (data && data.telegram_id) {
-        const isAdmin = data.telegram_id === ADMIN_ID; // Solo tú verás el panel
+        const isAdmin = data.telegram_id === ADMIN_ID;
         setUser({ telegram_id: data.telegram_id, first_name: data.first_name, level: 1, is_vip: data.is_vip, isAdmin });
         setHoldingWallet(Number(data.holding_wallet) || 0);
         setPoolWallet(Number(data.pool_wallet) || 0);
@@ -167,7 +166,6 @@ function App() {
   const nextLevelCost = currentLevel * 500;
   const nextLevelHash = currentLevel * 50;
   
-  // Conteo de referidos
   const totalReferrals = referrals.length;
   const activeVipReferrals = referrals.filter(r => r.is_vip === 1).length;
   const canWithdraw = user.is_vip && activeVipReferrals >= REQUIRED_VIP_REFERRALS;
@@ -200,8 +198,10 @@ function App() {
       if (newHolding >= remainingCost) newHolding -= remainingCost; 
       else { remainingCost -= newHolding; newHolding = 0; newPool -= remainingCost; }
       setHoldingWallet(newHolding); setPoolWallet(newPool);
-      setHashPower(prev => prev + nextLevelHash);
-      showModal('¡Nivel Subido!', `Ahora eres Nivel ${currentLevel + 1}. +${nextLevelHash} H/s`);
+      const newHashPower = hashPower + nextLevelHash; // Calculamos el nuevo poder
+      setHashPower(newHashPower);
+      const newLevel = Math.floor(newHashPower / 100) + 1; // Calculamos el nuevo nivel
+      showModal('¡Nivel Subido!', `Ahora eres Nivel ${newLevel}. +${nextLevelHash} H/s`);
     } else showModal('Saldo Insuficiente', 'Necesitas más $KABUTO para subir de nivel.', 'error');
   };
 
@@ -232,8 +232,9 @@ function App() {
     .then(data => {
       if (data.status === 'OK') {
         setUser(prev => ({ ...prev, is_vip: 1 }));
-        setHashPower(prev => prev + paymentInfo.hashAdd);
-        const newLevel = Math.floor((hashPower + paymentInfo.hashAdd) / 100) + 1;
+        const newHashPower = hashPower + paymentInfo.hashAdd;
+        setHashPower(newHashPower);
+        const newLevel = Math.floor(newHashPower / 100) + 1;
         showModal('¡VIP Activado!', `Tu VIP está activo. +${paymentInfo.hashAdd} H/s\n¡Ahora eres Nivel ${newLevel}! ⭐`);
         setPaymentInfo(null);
       }
@@ -354,7 +355,6 @@ function App() {
     });
   };
 
-  // Paquetes en USD (desde 1 USD)
   const realUpgrades = [
     { id: 'real1', name: 'Minero Diamante', cost_usd: 1, hashAdd: 1000, image: '/vip-diamond.png' },
     { id: 'real2', name: 'Minero Legendario', cost_usd: 5, hashAdd: 5000, image: '/vip-dragon.png' },
@@ -556,7 +556,6 @@ function App() {
             <input type="text" value={referralLink} readOnly className="ref-input" />
             <button className="buy-btn" onClick={copyLink}>Copiar</button>
           </div>
-          {/* CONTEO TOTAL DE REFERIDOS */}
           <h3 className="friends-title">TUS AMIGOS: {totalReferrals} (VIP: {activeVipReferrals}/{REQUIRED_VIP_REFERRALS})</h3>
           {referrals.length === 0 ? <p className="no-friends">Aún no has invitado a nadie. ¡Comparte tu enlace!</p> : referrals.map((ref) => (
             <div key={ref.telegram_id} className="upgrade-card">
@@ -601,7 +600,6 @@ function App() {
                 <h3>Retirar Ganancias</h3>
                 <p>Saldo disponible: <strong>${(holdingWallet * KABUTO_PRICE_USD).toFixed(2)} USD</strong> ({holdingWallet.toFixed(2)} $KABUTO)</p>
                 
-                {/* SELECTOR DE MONEDA DE RETIRO: USDT O LTC */}
                 <div className="currency-selector">
                   <button className={withdrawCurrency === 'USDT' ? 'active' : ''} onClick={() => setWithdrawCurrency('USDT')}>USDT (TRC20)</button>
                   <button className={withdrawCurrency === 'LTC' ? 'active' : ''} onClick={() => setWithdrawCurrency('LTC')}>Litecoin (LTC)</button>
