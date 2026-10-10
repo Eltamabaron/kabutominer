@@ -65,7 +65,7 @@ addColumnIfNotExists('last_seen', 'DATETIME DEFAULT CURRENT_TIMESTAMP');
 
 async function postPaymentToChannel(userName, amount, txHash) {
   const explorerUrl = `https://tonscan.org/tx/${txHash}`;
-  const message = `✅ *PAGO VERIFICADO*\n\n👤 *Usuario:* ${userName}\n💰 *Monto:* ${amount} USDT\n🆔 *Tx Hash:* [Ver transacción en la blockchain](${explorerUrl})\n\n¡Felicidades por tu activación VIP en Kabuto Miner! 🪲`;
+  const message = `✅ *PAGO VERIFICADO*\n\n👤 *Usuario:* ${userName}\n💰 *Monto:* ${amount} USD\n🆔 *Tx Hash:* [Ver transacción en la blockchain](${explorerUrl})\n\n¡Felicidades por tu activación VIP en Kabuto Miner! 🪲`;
   const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
   try { await axios.post(url, { chat_id: CHANNEL_USERNAME, text: message, parse_mode: 'Markdown', disable_web_page_preview: false }); } catch (e) {}
 }
@@ -78,11 +78,14 @@ async function postNewUserToChannel(userName, userId) {
 
 async function processPlisioWithdrawal(userName, amountUsd, currency, address) {
   try {
-    let cryptoPriceUsd = 1;
+    let cryptoPriceUsd = 1; // Por defecto para USDT
     let coingeckoId = '';
 
+    // Mapa de monedas soportadas por Plisio a sus IDs en CoinGecko
     if (currency === 'TON') coingeckoId = 'the-open-network';
     else if (currency === 'LTC') coingeckoId = 'litecoin';
+    else if (currency === 'TRX') coingeckoId = 'tron';
+    else if (currency === 'DOGE') coingeckoId = 'dogecoin';
 
     if (coingeckoId) {
       const priceRes = await axios.get(`https://api.coingecko.com/api/v3/simple/price?ids=${coingeckoId}&vs_currencies=usd`);
@@ -103,9 +106,12 @@ async function processPlisioWithdrawal(userName, amountUsd, currency, address) {
     if (plisioRes.data && plisioRes.data.status === 'success') {
       const txHash = plisioRes.data.data.tx_id || plisioRes.data.data.id;
       let explorerUrl = '';
+      
+      // Enlaces a los exploradores de cada blockchain
       if (currency === 'TON') explorerUrl = `https://tonscan.org/tx/${txHash}`;
       else if (currency === 'LTC') explorerUrl = `https://blockchair.com/litecoin/transaction/${txHash}`;
-      else if (currency === 'USDT') explorerUrl = `https://tronscan.org/#/transaction/${txHash}`;
+      else if (currency === 'USDT' || currency === 'TRX') explorerUrl = `https://tronscan.org/#/transaction/${txHash}`;
+      else if (currency === 'DOGE') explorerUrl = `https://blockchair.com/dogecoin/transaction/${txHash}`;
       
       const message = `💸 *RETIRO COMPLETADO*\n\n👤 *Usuario:* ${userName}\n💰 *Monto:* ${amountUsd} USD (${cryptoAmount} ${currency})\n🔗 *Dirección:* \`${address}\`\n🆔 *Tx Hash:* [Ver transacción en la blockchain](${explorerUrl})\n\n¡Pago procesado automáticamente vía Plisio! 🪲`;
       const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
@@ -223,7 +229,6 @@ app.post('/api/user/activate_vip', async (req, res) => {
   res.json({ status: 'OK', user, txHash: fakeHash });
 });
 
-// CAMBIO: Factura en USDT
 app.post('/api/create_plisio_invoice', async (req, res) => {
   const { upgrade_name, amount_usd, telegram_id } = req.body;
   try {
@@ -231,7 +236,7 @@ app.post('/api/create_plisio_invoice', async (req, res) => {
       params: {
         api_key: PLISIO_API_KEY, 
         amount: amount_usd, 
-        currency: 'USDT', // Plisio acepta USDT y deja elegir la moneda en el checkout
+        currency: 'USDT', // Cobramos en USDT, Plisio deja elegir con qué pagar en el checkout
         order_name: upgrade_name, 
         order_number: `${telegram_id}-${Date.now()}`,
         source_url: 'https://telegra.ph/Kabuto-Miner-Game-10-02'

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import './App.css';
 
 const API_URL = '/api';
-const ADMIN_ID = '1159596878'; // Tu ID real de Telegram
+const ADMIN_ID = '1159596878'; 
 
 const KABUTO_PRICE_USD = 0.001; 
 const MINING_MULTIPLIER = 0.00015; 
@@ -198,9 +198,9 @@ function App() {
       if (newHolding >= remainingCost) newHolding -= remainingCost; 
       else { remainingCost -= newHolding; newHolding = 0; newPool -= remainingCost; }
       setHoldingWallet(newHolding); setPoolWallet(newPool);
-      const newHashPower = hashPower + nextLevelHash; // Calculamos el nuevo poder
+      const newHashPower = hashPower + nextLevelHash;
       setHashPower(newHashPower);
-      const newLevel = Math.floor(newHashPower / 100) + 1; // Calculamos el nuevo nivel
+      const newLevel = Math.floor(newHashPower / 100) + 1;
       showModal('¡Nivel Subido!', `Ahora eres Nivel ${newLevel}. +${nextLevelHash} H/s`);
     } else showModal('Saldo Insuficiente', 'Necesitas más $KABUTO para subir de nivel.', 'error');
   };
@@ -260,10 +260,14 @@ function App() {
 
   const validateAddress = (address, currency) => {
     if (!address) return false;
-    if (currency === 'USDT') {
+    if (currency === 'USDT' || currency === 'TRX') {
       return /^T[A-Za-z0-9]{33}$/.test(address);
     } else if (currency === 'LTC') {
       return /^(L|M|ltc1)[A-Za-z0-9]{20,44}$/.test(address);
+    } else if (currency === 'TON') {
+      return /^(U|E)[A-Za-z0-9_-]{46,48}$/.test(address);
+    } else if (currency === 'DOGE') {
+      return /^D[A-Za-z0-9]{34}$/.test(address);
     }
     return false;
   };
@@ -600,9 +604,13 @@ function App() {
                 <h3>Retirar Ganancias</h3>
                 <p>Saldo disponible: <strong>${(holdingWallet * KABUTO_PRICE_USD).toFixed(2)} USD</strong> ({holdingWallet.toFixed(2)} $KABUTO)</p>
                 
+                {/* SELECTOR DE MONEDAS ACEPTADAS POR PLISIO */}
                 <div className="currency-selector">
-                  <button className={withdrawCurrency === 'USDT' ? 'active' : ''} onClick={() => setWithdrawCurrency('USDT')}>USDT (TRC20)</button>
-                  <button className={withdrawCurrency === 'LTC' ? 'active' : ''} onClick={() => setWithdrawCurrency('LTC')}>Litecoin (LTC)</button>
+                  <button className={withdrawCurrency === 'USDT' ? 'active' : ''} onClick={() => setWithdrawCurrency('USDT')}>USDT</button>
+                  <button className={withdrawCurrency === 'LTC' ? 'active' : ''} onClick={() => setWithdrawCurrency('LTC')}>LTC</button>
+                  <button className={withdrawCurrency === 'TON' ? 'active' : ''} onClick={() => setWithdrawCurrency('TON')}>TON</button>
+                  <button className={withdrawCurrency === 'TRX' ? 'active' : ''} onClick={() => setWithdrawCurrency('TRX')}>TRX</button>
+                  <button className={withdrawCurrency === 'DOGE' ? 'active' : ''} onClick={() => setWithdrawCurrency('DOGE')}>DOGE</button>
                 </div>
 
                 <p className="payment-warning">Mínimo: {MIN_WITHDRAWAL_USD} USD | Comisión: {WITHDRAWAL_FEE} USD</p>
