@@ -33,7 +33,11 @@ function App() {
   const [adminView, setAdminView] = useState(true);
   const [modal, setModal] = useState({ show: false, title: '', message: '', type: 'success' });
   const [claimedTasks, setClaimedTasks] = useState([]);
+  
+  // NUEVO: Para el selector de moneda de pago
   const [paymentInfo, setPaymentInfo] = useState(null);
+  const [showCurrencySelector, setShowCurrencySelector] = useState(false);
+  const [selectedUpgrade, setSelectedUpgrade] = useState(null);
 
   const stateRef = useRef();
   stateRef.current = { holdingWallet, poolWallet, hashPower, is_vip: user.is_vip };
@@ -58,7 +62,6 @@ function App() {
       .then(data => {
         const arr = Array.isArray(data) ? data : [];
         const currentVipCount = arr.filter(r => r.is_vip === 1).length;
-        
         if (prevVipReferralsRef.current !== -1 && currentVipCount > prevVipReferralsRef.current) {
           const newVipUser = arr.find(r => r.is_vip === 1);
           if (newVipUser) {
@@ -205,17 +208,30 @@ function App() {
     } else showModal('Saldo Insuficiente', 'Necesitas más $KABUTO para subir de nivel.', 'error');
   };
 
+  // NUEVA LÓGICA DE COMPRA: Abre el selector de moneda
   const handleBuyReal = (upgrade) => {
+    setSelectedUpgrade(upgrade);
+    setShowCurrencySelector(true);
+  };
+
+  // Al elegir la moneda, se la pedimos al Backend
+  const processPaymentWithCurrency = (currency) => {
+    setShowCurrencySelector(false);
     fetch(`${API_URL}/create_plisio_invoice`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ upgrade_name: upgrade.name, amount_usd: upgrade.cost_usd, telegram_id: user.telegram_id })
+      body: JSON.stringify({ 
+        upgrade_name: selectedUpgrade.name, 
+        amount_usd: selectedUpgrade.cost_usd, 
+        telegram_id: user.telegram_id,
+        currency: currency
+      })
     })
     .then(res => res.json())
     .then(data => {
       if (data.url) {
         window.open(data.url, '_blank');
-        setPaymentInfo({ upgrade_name: upgrade.name, amount_usd: upgrade.cost_usd, hashAdd: upgrade.hashAdd });
+        setPaymentInfo({ ...selectedUpgrade, currency });
       } else {
         showModal('Error', data.error || 'No se pudo generar la factura.', 'error');
       }
@@ -260,24 +276,16 @@ function App() {
 
   const validateAddress = (address, currency) => {
     if (!address) return false;
-    if (currency === 'USDT' || currency === 'TRX') {
-      return /^T[A-Za-z0-9]{33}$/.test(address);
-    } else if (currency === 'LTC') {
-      return /^(L|M|ltc1)[A-Za-z0-9]{20,44}$/.test(address);
-    } else if (currency === 'TON') {
-      return /^(U|E)[A-Za-z0-9_-]{46,48}$/.test(address);
-    } else if (currency === 'DOGE') {
-      return /^D[A-Za-z0-9]{34}$/.test(address);
-    }
+    if (currency === 'USDT' || currency === 'TRX') return /^T[A-Za-z0-9]{33}$/.test(address);
+    else if (currency === 'LTC') return /^(L|M|ltc1)[A-Za-z0-9]{20,44}$/.test(address);
+    else if (currency === 'TON') return /^(U|E)[A-Za-z0-9_-]{46,48}$/.test(address);
+    else if (currency === 'DOGE') return /^D[A-Za-z0-9]{34}$/.test(address);
     return false;
   };
 
   const processWithdrawal = () => {
     if (!withdrawAddress || !withdrawAmount) return showModal('Error', 'Ingresa tu dirección y el monto.', 'error');
-    
-    if (!validateAddress(withdrawAddress, withdrawCurrency)) {
-      return showModal('Dirección Inválida', `La dirección de ${withdrawCurrency} no tiene un formato válido.`, 'error');
-    }
+    if (!validateAddress(withdrawAddress, withdrawCurrency)) return showModal('Dirección Inválida', `La dirección de ${withdrawCurrency} no tiene un formato válido.`, 'error');
 
     const usdToWithdraw = parseFloat(withdrawAmount);
     if (usdToWithdraw < MIN_WITHDRAWAL_USD) return showModal('Error', `El retiro mínimo es de ${MIN_WITHDRAWAL_USD} USD.`, 'error');
@@ -498,7 +506,7 @@ function App() {
           </div>
           <div className="divider"></div>
           <h2 className="shop-title">MEJORAS VIP</h2>
-          <p className="shop-subtitle">Desbloquea poder máximo y habilita retiros (Elige tu cripto en el pago)</p>
+          <p className="shop-subtitle">Desbloquea poder máximo y habilita retiros</p>
           {realUpgrades.map(up => (
             <div key={up.id} className="upgrade-card vip-card">
               <div className="upgrade-info">
@@ -511,12 +519,31 @@ function App() {
         </div>
       )}
 
+      {/* MODAL SELECCIÓN DE MONEDA DE PAGO */}
+      {showCurrencySelector && (
+        <div className="payment-modal-overlay">
+          <div className="payment-modal">
+            <h3>Elige tu Cripto</h3>
+            <p>¿Con qué moneda quieres pagar {selectedUpgrade?.cost_usd} USD?</p>
+            <div className="currency-selector">
+              <button onClick={() => processPaymentWithCurrency('TON')}>TON</button>
+              <button onClick={() => processPaymentWithCurrency('USDT')}>USDT</button>
+              <button onClick={() => processPaymentWithCurrency('LTC')}>LTC</button>
+              <button onClick={() => processPaymentWithCurrency('TRX')}>TRX</button>
+              <button onClick={() => processPaymentWithCurrency('DOGE')}>DOGE</button>
+            </div>
+            <button className="claim-btn" onClick={() => setShowCurrencySelector(false)} style={{marginTop: '10px', background: '#555'}}>CANCELAR</button>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL CONFIRMACIÓN DE PAGO PLISIO */}
       {paymentInfo && (
         <div className="payment-modal-overlay">
           <div className="payment-modal">
-            <h3>Pago de {paymentInfo.upgrade_name}</h3>
-            <p>Se ha abierto la página de Plisio para que pagues <strong>{paymentInfo.amount_usd} USD</strong>.</p>
-            <p className="payment-warning">Allí podrás elegir pagar con TON, USDT, LTC, BNB, etc. Presiona el botón cuando hayas pagado.</p>
+            <h3>Pago de {paymentInfo.name}</h3>
+            <p>Se ha abierto Plisio para que pagues <strong>{paymentInfo.cost_usd} USD</strong> en {paymentInfo.currency}.</p>
+            <p className="payment-warning">Presiona el botón cuando hayas hecho el pago para activar tu VIP.</p>
             <button className="claim-btn vip-btn" onClick={confirmMockPayment} style={{marginTop: '20px'}}>Ya pagué (Activar VIP)</button>
             <button className="claim-btn" onClick={() => setPaymentInfo(null)} style={{marginTop: '10px', background: '#555'}}>Cerrar</button>
           </div>
@@ -603,8 +630,6 @@ function App() {
               <div className="payment-modal">
                 <h3>Retirar Ganancias</h3>
                 <p>Saldo disponible: <strong>${(holdingWallet * KABUTO_PRICE_USD).toFixed(2)} USD</strong> ({holdingWallet.toFixed(2)} $KABUTO)</p>
-                
-                {/* SELECTOR DE MONEDAS ACEPTADAS POR PLISIO */}
                 <div className="currency-selector">
                   <button className={withdrawCurrency === 'USDT' ? 'active' : ''} onClick={() => setWithdrawCurrency('USDT')}>USDT</button>
                   <button className={withdrawCurrency === 'LTC' ? 'active' : ''} onClick={() => setWithdrawCurrency('LTC')}>LTC</button>
@@ -612,7 +637,6 @@ function App() {
                   <button className={withdrawCurrency === 'TRX' ? 'active' : ''} onClick={() => setWithdrawCurrency('TRX')}>TRX</button>
                   <button className={withdrawCurrency === 'DOGE' ? 'active' : ''} onClick={() => setWithdrawCurrency('DOGE')}>DOGE</button>
                 </div>
-
                 <p className="payment-warning">Mínimo: {MIN_WITHDRAWAL_USD} USD | Comisión: {WITHDRAWAL_FEE} USD</p>
                 <div className="withdraw-input-box">
                   <input type="number" step="0.01" placeholder="Monto en USD" value={withdrawAmount} onChange={(e) => setWithdrawAmount(e.target.value)} className="ref-input" />

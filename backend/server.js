@@ -78,10 +78,9 @@ async function postNewUserToChannel(userName, userId) {
 
 async function processPlisioWithdrawal(userName, amountUsd, currency, address) {
   try {
-    let cryptoPriceUsd = 1; // Por defecto para USDT
+    let cryptoPriceUsd = 1; 
     let coingeckoId = '';
 
-    // Mapa de monedas soportadas por Plisio a sus IDs en CoinGecko
     if (currency === 'TON') coingeckoId = 'the-open-network';
     else if (currency === 'LTC') coingeckoId = 'litecoin';
     else if (currency === 'TRX') coingeckoId = 'tron';
@@ -106,8 +105,6 @@ async function processPlisioWithdrawal(userName, amountUsd, currency, address) {
     if (plisioRes.data && plisioRes.data.status === 'success') {
       const txHash = plisioRes.data.data.tx_id || plisioRes.data.data.id;
       let explorerUrl = '';
-      
-      // Enlaces a los exploradores de cada blockchain
       if (currency === 'TON') explorerUrl = `https://tonscan.org/tx/${txHash}`;
       else if (currency === 'LTC') explorerUrl = `https://blockchair.com/litecoin/transaction/${txHash}`;
       else if (currency === 'USDT' || currency === 'TRX') explorerUrl = `https://tronscan.org/#/transaction/${txHash}`;
@@ -116,7 +113,6 @@ async function processPlisioWithdrawal(userName, amountUsd, currency, address) {
       const message = `💸 *RETIRO COMPLETADO*\n\n👤 *Usuario:* ${userName}\n💰 *Monto:* ${amountUsd} USD (${cryptoAmount} ${currency})\n🔗 *Dirección:* \`${address}\`\n🆔 *Tx Hash:* [Ver transacción en la blockchain](${explorerUrl})\n\n¡Pago procesado automáticamente vía Plisio! 🪲`;
       const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
       await axios.post(url, { chat_id: CHANNEL_USERNAME, text: message, parse_mode: 'Markdown', disable_web_page_preview: false });
-      
       return { success: true };
     } else {
       console.error('Error retiro Plisio:', plisioRes.data);
@@ -162,7 +158,6 @@ app.post('/api/user/login', (req, res) => {
 app.post('/api/user/claim_task', (req, res) => {
   const { telegram_id, task_id } = req.body;
   const reward = TASK_REWARDS[task_id] || 0;
-  
   if (reward === 0) return res.status(400).json({ error: 'Tarea inválida' });
 
   const user = db.prepare('SELECT claimed_tasks, holding_wallet FROM users WHERE telegram_id = ?').get(telegram_id);
@@ -173,7 +168,6 @@ app.post('/api/user/claim_task', (req, res) => {
 
   tasks.push(task_id);
   const newHolding = user.holding_wallet + reward;
-  
   db.prepare('UPDATE users SET claimed_tasks = ?, holding_wallet = ? WHERE telegram_id = ?').run(tasks.join(','), newHolding, telegram_id);
   res.json({ status: 'OK', new_holding_wallet: newHolding });
 });
@@ -189,12 +183,10 @@ app.post('/api/user/save', (req, res) => {
     const currentTotal = currentUser.holding_wallet + currentUser.pool_wallet;
     const newTotal = holding_wallet + pool_wallet;
     const mined = Math.max(0, newTotal - currentTotal);
-
     if (mined > 0 && currentUser.referred_by) {
       const commission = mined * 0.10;
       db.prepare('UPDATE users SET team_wallet = team_wallet + ? WHERE telegram_id = ?').run(commission, currentUser.referred_by);
     }
-
     const updatedUser = db.prepare('SELECT team_wallet FROM users WHERE telegram_id = ?').get(telegram_id);
     newTeamWallet = updatedUser.team_wallet || 0;
   }
@@ -208,7 +200,6 @@ app.post('/api/user/claim_team', (req, res) => {
   const { telegram_id } = req.body;
   const user = db.prepare('SELECT team_wallet FROM users WHERE telegram_id = ?').get(telegram_id);
   if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
-  
   const amount = user.team_wallet;
   if (amount > 0) {
     db.prepare('UPDATE users SET holding_wallet = holding_wallet + ?, team_wallet = 0 WHERE telegram_id = ?').run(amount, telegram_id);
@@ -222,24 +213,25 @@ app.post('/api/user/activate_vip', async (req, res) => {
 
   db.prepare('UPDATE users SET is_vip = 1, total_invested = total_invested + ? WHERE telegram_id = ?').run(amount_usd, telegram_id);
   const fakeHash = '0x' + Array.from({length: 64}, () => '0123456789abcdef'[Math.floor(Math.random() * 16)]).join('');
-  
   try { await postPaymentToChannel(first_name || 'Usuario', amount_usd, fakeHash); } catch (e) {}
 
   const user = db.prepare('SELECT * FROM users WHERE telegram_id = ?').get(telegram_id);
   res.json({ status: 'OK', user, txHash: fakeHash });
 });
 
+// NUEVA RUTA: Crear factura en la moneda elegida por el usuario
 app.post('/api/create_plisio_invoice', async (req, res) => {
-  const { upgrade_name, amount_usd, telegram_id } = req.body;
+  const { upgrade_name, amount_usd, telegram_id, currency } = req.body; // Recibimos la moneda
   try {
     const response = await axios.get('https://api.plisio.net/api/v1/invoices/new', {
       params: {
         api_key: PLISIO_API_KEY, 
-        amount: amount_usd, 
-        currency: 'USDT', // Cobramos en USDT, Plisio deja elegir con qué pagar en el checkout
+        source_amount: amount_usd, // Monto en USD
+        source_currency: 'USD', // Moneda base
+        currency: currency, // Moneda con la que el usuario va a pagar (TON, LTC, USDT, etc.)
         order_name: upgrade_name, 
         order_number: `${telegram_id}-${Date.now()}`,
-        source_url: 'https://telegra.ph/Kabuto-Miner-Game-10-02'
+        source_url: 'https://t.me/Kabutominer_bot'
       }
     });
 
@@ -263,7 +255,6 @@ app.post('/api/plisio_webhook', async (req, res) => {
   if (data.status === 'completed' || data.status === 'paid') {
     const telegram_id = data.order_number.split('-')[0];
     const amount = parseFloat(data.amount);
-    
     const user = db.prepare('SELECT * FROM users WHERE telegram_id = ?').get(telegram_id);
     if (user && !user.is_vip) {
       db.prepare('UPDATE users SET is_vip = 1, total_invested = total_invested + ? WHERE telegram_id = ?').run(amount, telegram_id);
@@ -282,9 +273,7 @@ app.post('/api/request_withdrawal', async (req, res) => {
 
   if (user.holding_wallet >= kabutoToBurn) {
     db.prepare('UPDATE users SET holding_wallet = holding_wallet - ?, total_withdrawn = total_withdrawn + ? WHERE telegram_id = ?').run(kabutoToBurn, amount, telegram_id);
-    
     const withdrawalResult = await processPlisioWithdrawal(user.first_name, amount, currency, to_address);
-    
     if (withdrawalResult.success) {
       res.json({ status: 'OK' });
     } else {
@@ -308,33 +297,18 @@ app.get('/api/admin/stats', (req, res) => {
   const totalKabuto = db.prepare('SELECT SUM(holding_wallet + pool_wallet) as total FROM users').get().total || 0;
   const totalInvested = db.prepare('SELECT SUM(total_invested) as total FROM users').get().total || 0;
   const totalWithdrawn = db.prepare('SELECT SUM(total_withdrawn) as total FROM users').get().total || 0;
-  
   const adminProfitWithdrawn = parseFloat(db.prepare("SELECT value FROM settings WHERE key = 'admin_profit_withdrawn'").get()?.value || '0');
   const adminGrossProfit = totalInvested * 0.30;
   const adminProfitAvailable = Math.max(0, adminGrossProfit - adminProfitWithdrawn);
-  
   const liquidityPool = Math.max(0, (totalInvested * 0.70) - totalWithdrawn);
-  
   const onlineUsers = db.prepare("SELECT COUNT(*) as count FROM users WHERE last_seen > datetime('now', '-15 seconds')").get().count;
-  
-  res.json({ 
-    totalUsers, 
-    totalVips, 
-    totalKabuto, 
-    totalInvested, 
-    totalWithdrawn, 
-    liquidityPool, 
-    adminProfitAvailable,
-    adminProfitWithdrawn,
-    onlineUsers 
-  });
+  res.json({ totalUsers, totalVips, totalKabuto, totalInvested, totalWithdrawn, liquidityPool, adminProfitAvailable, adminProfitWithdrawn, onlineUsers });
 });
 
 app.post('/api/admin/withdraw_profit', (req, res) => {
   const { amount } = req.body;
   const currentWithdrawn = parseFloat(db.prepare("SELECT value FROM settings WHERE key = 'admin_profit_withdrawn'").get()?.value || '0');
   const newTotal = currentWithdrawn + amount;
-  
   db.prepare("UPDATE settings SET value = ? WHERE key = 'admin_profit_withdrawn'").run(String(newTotal));
   res.json({ status: 'OK', admin_profit_withdrawn: newTotal });
 });
