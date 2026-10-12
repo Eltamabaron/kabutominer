@@ -155,6 +155,17 @@ app.post('/api/user/login', (req, res) => {
   res.json(user);
 });
 
+// NUEVA RUTA: Para que el frontend verifique si el pago ya fue confirmado
+app.get('/api/user/check_vip/:telegram_id', (req, res) => {
+  const { telegram_id } = req.params;
+  const user = db.prepare('SELECT is_vip, hash_power FROM users WHERE telegram_id = ?').get(telegram_id);
+  if (user) {
+    res.json({ is_vip: user.is_vip, hash_power: user.hash_power });
+  } else {
+    res.status(404).json({ error: 'Usuario no encontrado' });
+  }
+});
+
 app.post('/api/user/claim_task', (req, res) => {
   const { telegram_id, task_id } = req.body;
   const reward = TASK_REWARDS[task_id] || 0;
@@ -219,16 +230,15 @@ app.post('/api/user/activate_vip', async (req, res) => {
   res.json({ status: 'OK', user, txHash: fakeHash });
 });
 
-// NUEVA RUTA: Crear factura en la moneda elegida por el usuario
 app.post('/api/create_plisio_invoice', async (req, res) => {
-  const { upgrade_name, amount_usd, telegram_id, currency } = req.body; // Recibimos la moneda
+  const { upgrade_name, amount_usd, telegram_id, currency } = req.body;
   try {
     const response = await axios.get('https://api.plisio.net/api/v1/invoices/new', {
       params: {
         api_key: PLISIO_API_KEY, 
-        source_amount: amount_usd, // Monto en USD
-        source_currency: 'USD', // Moneda base
-        currency: currency, // Moneda con la que el usuario va a pagar (TON, LTC, USDT, etc.)
+        source_amount: amount_usd, 
+        source_currency: 'USD', 
+        currency: currency, 
         order_name: upgrade_name, 
         order_number: `${telegram_id}-${Date.now()}`,
         source_url: 'https://t.me/Kabutominer_bot'

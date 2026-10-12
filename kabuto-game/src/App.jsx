@@ -34,7 +34,6 @@ function App() {
   const [modal, setModal] = useState({ show: false, title: '', message: '', type: 'success' });
   const [claimedTasks, setClaimedTasks] = useState([]);
   
-  // NUEVO: Para el selector de moneda de pago
   const [paymentInfo, setPaymentInfo] = useState(null);
   const [showCurrencySelector, setShowCurrencySelector] = useState(false);
   const [selectedUpgrade, setSelectedUpgrade] = useState(null);
@@ -208,13 +207,11 @@ function App() {
     } else showModal('Saldo Insuficiente', 'Necesitas más $KABUTO para subir de nivel.', 'error');
   };
 
-  // NUEVA LÓGICA DE COMPRA: Abre el selector de moneda
   const handleBuyReal = (upgrade) => {
     setSelectedUpgrade(upgrade);
     setShowCurrencySelector(true);
   };
 
-  // Al elegir la moneda, se la pedimos al Backend
   const processPaymentWithCurrency = (currency) => {
     setShowCurrencySelector(false);
     fetch(`${API_URL}/create_plisio_invoice`, {
@@ -238,23 +235,22 @@ function App() {
     });
   };
 
-  const confirmMockPayment = () => {
-    fetch(`${API_URL}/user/activate_vip`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ telegram_id: user.telegram_id, first_name: user.first_name, amount_usd: paymentInfo.amount_usd })
-    })
-    .then(res => res.json())
-    .then(data => {
-      if (data.status === 'OK') {
-        setUser(prev => ({ ...prev, is_vip: 1 }));
-        const newHashPower = hashPower + paymentInfo.hashAdd;
-        setHashPower(newHashPower);
-        const newLevel = Math.floor(newHashPower / 100) + 1;
-        showModal('¡VIP Activado!', `Tu VIP está activo. +${paymentInfo.hashAdd} H/s\n¡Ahora eres Nivel ${newLevel}! ⭐`);
-        setPaymentInfo(null);
-      }
-    });
+  // NUEVA FUNCIÓN: Verifica en el servidor si Plisio ya confirmó el pago
+  const verifyPayment = () => {
+    fetch(`${API_URL}/user/check_vip/${user.telegram_id}`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.is_vip == 1) {
+          setUser(prev => ({ ...prev, is_vip: 1 }));
+          setHashPower(Number(data.hash_power) || hashPower);
+          const newLevel = Math.floor(Number(data.hash_power) / 100) + 1;
+          showModal('¡VIP Activado!', `Pago confirmado por Plisio.\n¡Ahora eres Nivel ${newLevel}! ⭐`);
+          setPaymentInfo(null);
+        } else {
+          showModal('Verificando...', 'Tu pago aún no ha sido confirmado por la blockchain. Si ya pagaste, espera 1 o 2 minutos y presiona de nuevo.', 'error');
+        }
+      })
+      .catch(() => showModal('Error', 'No se pudo conectar al servidor.', 'error'));
   };
 
   const copyLink = () => {
@@ -537,14 +533,14 @@ function App() {
         </div>
       )}
 
-      {/* MODAL CONFIRMACIÓN DE PAGO PLISIO */}
+      {/* MODAL CONFIRMACIÓN DE PAGO PLISIO (Automático) */}
       {paymentInfo && (
         <div className="payment-modal-overlay">
           <div className="payment-modal">
             <h3>Pago de {paymentInfo.name}</h3>
             <p>Se ha abierto Plisio para que pagues <strong>{paymentInfo.cost_usd} USD</strong> en {paymentInfo.currency}.</p>
-            <p className="payment-warning">Presiona el botón cuando hayas hecho el pago para activar tu VIP.</p>
-            <button className="claim-btn vip-btn" onClick={confirmMockPayment} style={{marginTop: '20px'}}>Ya pagué (Activar VIP)</button>
+            <p className="payment-warning">Una vez que hayas pagado en Plisio, presiona el botón para verificar y activar tu VIP automáticamente.</p>
+            <button className="claim-btn vip-btn" onClick={verifyPayment} style={{marginTop: '20px'}}>Verificar Pago</button>
             <button className="claim-btn" onClick={() => setPaymentInfo(null)} style={{marginTop: '10px', background: '#555'}}>Cerrar</button>
           </div>
         </div>
