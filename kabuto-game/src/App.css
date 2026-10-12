@@ -296,3 +296,10 @@ body { background-color: #121212; color: #ffffff; background-image: url('/bg.jpg
   font-weight: bold;
   color: #fff;
 }
+/* IMÁGENES DE CRIPTOMONEDAS EN BOTONES */
+.crypto-btn img.crypto-icon {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+  border-radius: 50%; /* Para que las monedas se vean redondas */
+}
