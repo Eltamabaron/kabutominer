@@ -22,6 +22,14 @@ const TASK_REWARDS = {
   'visit_web': 200
 };
 
+// Mapa para saber cuánto Hash Power dar según el paquete comprado
+const UPGRADE_HASH_ADD = {
+  'Minero Diamante': 1000,
+  'Minero Legendario': 5000,
+  'Minero Galáctico': 10000,
+  'Minero Cósmico': 20000
+};
+
 const db = new Database('kabuto.db');
 
 db.exec(`
@@ -78,7 +86,7 @@ async function postNewUserToChannel(userName, userId) {
 
 async function processPlisioWithdrawal(userName, amountUsd, currency, address) {
   try {
-    let cryptoPriceUsd = 1; // Por defecto para USDT y USDC
+    let cryptoPriceUsd = 1; 
     let coingeckoId = '';
 
     if (currency === 'TON') coingeckoId = 'the-open-network';
@@ -160,6 +168,7 @@ app.post('/api/user/login', (req, res) => {
   res.json(user);
 });
 
+// Ruta para que el frontend verifique si el pago ya fue confirmado
 app.get('/api/user/check_vip/:telegram_id', (req, res) => {
   const { telegram_id } = req.params;
   const user = db.prepare('SELECT is_vip, hash_power FROM users WHERE telegram_id = ?').get(telegram_id);
@@ -222,18 +231,6 @@ app.post('/api/user/claim_team', (req, res) => {
   res.json({ status: 'OK', claimed: amount });
 });
 
-app.post('/api/user/activate_vip', async (req, res) => {
-  const { telegram_id, first_name, amount_usd } = req.body;
-  if (!telegram_id) return res.status(400).json({ error: 'Falta telegram_id' });
-
-  db.prepare('UPDATE users SET is_vip = 1, total_invested = total_invested + ? WHERE telegram_id = ?').run(amount_usd, telegram_id);
-  const fakeHash = '0x' + Array.from({length: 64}, () => '0123456789abcdef'[Math.floor(Math.random() * 16)]).join('');
-  try { await postPaymentToChannel(first_name || 'Usuario', amount_usd, fakeHash); } catch (e) {}
-
-  const user = db.prepare('SELECT * FROM users WHERE telegram_id = ?').get(telegram_id);
-  res.json({ status: 'OK', user, txHash: fakeHash });
-});
-
 app.post('/api/create_plisio_invoice', async (req, res) => {
   const { upgrade_name, amount_usd, telegram_id, currency } = req.body;
   try {
@@ -264,15 +261,20 @@ app.post('/api/create_plisio_invoice', async (req, res) => {
   }
 });
 
+// WEBHOOK DE PLISIO: Aquí es donde Plisio avisa que el pago se hizo. 
+// Actualiza el VIP y el Hash Power automáticamente en la base de datos.
 app.post('/api/plisio_webhook', async (req, res) => {
   const data = req.body;
   if (data.status === 'completed' || data.status === 'paid') {
     const telegram_id = data.order_number.split('-')[0];
-    const amount = parseFloat(data.amount);
+    const usdAmount = parseFloat(data.source_amount || data.amount);
+    const upgradeName = data.order_name;
+    const hashAdd = UPGRADE_HASH_ADD[upgradeName] || 0;
+
     const user = db.prepare('SELECT * FROM users WHERE telegram_id = ?').get(telegram_id);
     if (user && !user.is_vip) {
-      db.prepare('UPDATE users SET is_vip = 1, total_invested = total_invested + ? WHERE telegram_id = ?').run(amount, telegram_id);
-      await postPaymentToChannel(user.first_name, amount, data.tx_id);
+      db.prepare('UPDATE users SET is_vip = 1, total_invested = total_invested + ?, hash_power = hash_power + ? WHERE telegram_id = ?').run(usdAmount, hashAdd, telegram_id);
+      await postPaymentToChannel(user.first_name, usdAmount, data.tx_id);
     }
   }
   res.json({ status: 'OK' });

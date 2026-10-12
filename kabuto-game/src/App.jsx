@@ -160,6 +160,28 @@ function App() {
     return () => clearInterval(saveInterval);
   }, [user, adminView]);
 
+  // NUEVO: El escuchador automático. Se activa cuando hay un pago en espera.
+  useEffect(() => {
+    if (paymentInfo) {
+      const interval = setInterval(() => {
+        fetch(`${API_URL}/user/check_vip/${user.telegram_id}`)
+          .then(res => res.json())
+          .then(data => {
+            if (data.is_vip == 1) {
+              setUser(prev => ({ ...prev, is_vip: 1 }));
+              setHashPower(Number(data.hash_power) || hashPower);
+              const newLevel = Math.floor(Number(data.hash_power) / 100) + 1;
+              showModal('¡VIP Activado!', `Pago confirmado automáticamente por Plisio.\n¡Ahora eres Nivel ${newLevel}! ⭐`);
+              setPaymentInfo(null); // Esto detiene el escuchador
+            }
+          })
+          .catch(err => console.error('Error verificando pago:', err));
+      }, 5000); // Verifica cada 5 segundos
+
+      return () => clearInterval(interval); // Limpia el intervalo si el modal se cierra
+    }
+  }, [paymentInfo, user.telegram_id, hashPower]);
+
   const totalBalance = holdingWallet + poolWallet;
   const totalUsdValue = (totalBalance * KABUTO_PRICE_USD).toFixed(4);
   const dailyProfit = (hashPower * MINING_MULTIPLIER * 86400).toFixed(2); 
@@ -228,28 +250,11 @@ function App() {
     .then(data => {
       if (data.url) {
         window.open(data.url, '_blank');
-        setPaymentInfo({ ...selectedUpgrade, currency });
+        setPaymentInfo({ ...selectedUpgrade, currency }); // Esto activa el escuchador automático
       } else {
         showModal('Error', data.error || 'No se pudo generar la factura.', 'error');
       }
     });
-  };
-
-  const verifyPayment = () => {
-    fetch(`${API_URL}/user/check_vip/${user.telegram_id}`)
-      .then(res => res.json())
-      .then(data => {
-        if (data.is_vip == 1) {
-          setUser(prev => ({ ...prev, is_vip: 1 }));
-          setHashPower(Number(data.hash_power) || hashPower);
-          const newLevel = Math.floor(Number(data.hash_power) / 100) + 1;
-          showModal('¡VIP Activado!', `Pago confirmado por Plisio.\n¡Ahora eres Nivel ${newLevel}! ⭐`);
-          setPaymentInfo(null);
-        } else {
-          showModal('Verificando...', 'Tu pago aún no ha sido confirmado por la blockchain. Si ya pagaste, espera 1 o 2 minutos y presiona de nuevo.', 'error');
-        }
-      })
-      .catch(() => showModal('Error', 'No se pudo conectar al servidor.', 'error'));
   };
 
   const copyLink = () => {
@@ -537,14 +542,14 @@ function App() {
         </div>
       )}
 
-      {/* MODAL CONFIRMACIÓN DE PAGO PLISIO */}
+      {/* MODAL ESPERA DE PAGO (Automático) */}
       {paymentInfo && (
         <div className="payment-modal-overlay">
           <div className="payment-modal">
-            <h3>Pago de {paymentInfo.name}</h3>
+            <h3>Procesando Pago...</h3>
             <p>Se ha abierto Plisio para que pagues <strong>{paymentInfo.cost_usd} USD</strong> en {paymentInfo.currency}.</p>
-            <p className="payment-warning">Una vez que hayas pagado en Plisio, presiona el botón para verificar y activar tu VIP automáticamente.</p>
-            <button className="claim-btn vip-btn" onClick={verifyPayment} style={{marginTop: '20px'}}>Verificar Pago</button>
+            <div className="spinner"></div>
+            <p className="payment-warning">Esperando confirmación de la blockchain. Tu VIP se activará automáticamente aquí cuando el pago sea validado.</p>
             <button className="claim-btn" onClick={() => setPaymentInfo(null)} style={{marginTop: '10px', background: '#555'}}>Cerrar</button>
           </div>
         </div>
