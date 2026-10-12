@@ -235,7 +235,6 @@ function App() {
     });
   };
 
-  // NUEVA FUNCIÓN: Verifica en el servidor si Plisio ya confirmó el pago
   const verifyPayment = () => {
     fetch(`${API_URL}/user/check_vip/${user.telegram_id}`)
       .then(res => res.json())
@@ -276,6 +275,8 @@ function App() {
     else if (currency === 'LTC') return /^(L|M|ltc1)[A-Za-z0-9]{20,44}$/.test(address);
     else if (currency === 'TON') return /^(U|E)[A-Za-z0-9_-]{46,48}$/.test(address);
     else if (currency === 'DOGE') return /^D[A-Za-z0-9]{34}$/.test(address);
+    else if (currency === 'BNB' || currency === 'USDC') return /^0x[a-fA-F0-9]{40}$/.test(address);
+    else if (currency === 'SOL') return /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(address);
     return false;
   };
 
@@ -515,25 +516,28 @@ function App() {
         </div>
       )}
 
-      {/* MODAL SELECCIÓN DE MONEDA DE PAGO */}
+      {/* MODAL SELECCIÓN DE MONEDA DE PAGO (MODERNO) */}
       {showCurrencySelector && (
         <div className="payment-modal-overlay">
           <div className="payment-modal">
             <h3>Elige tu Cripto</h3>
             <p>¿Con qué moneda quieres pagar {selectedUpgrade?.cost_usd} USD?</p>
-            <div className="currency-selector">
-              <button onClick={() => processPaymentWithCurrency('TON')}>TON</button>
-              <button onClick={() => processPaymentWithCurrency('USDT')}>USDT</button>
-              <button onClick={() => processPaymentWithCurrency('LTC')}>LTC</button>
-              <button onClick={() => processPaymentWithCurrency('TRX')}>TRX</button>
-              <button onClick={() => processPaymentWithCurrency('DOGE')}>DOGE</button>
+            <div className="crypto-grid">
+              <button className="crypto-btn" onClick={() => processPaymentWithCurrency('TON')}><span className="crypto-icon">🟦</span><span className="crypto-name">TON</span></button>
+              <button className="crypto-btn" onClick={() => processPaymentWithCurrency('USDT')}><span className="crypto-icon">💵</span><span className="crypto-name">USDT</span></button>
+              <button className="crypto-btn" onClick={() => processPaymentWithCurrency('LTC')}><span className="crypto-icon">🪙</span><span className="crypto-name">LTC</span></button>
+              <button className="crypto-btn" onClick={() => processPaymentWithCurrency('BNB')}><span className="crypto-icon">🟡</span><span className="crypto-name">BNB</span></button>
+              <button className="crypto-btn" onClick={() => processPaymentWithCurrency('TRX')}><span className="crypto-icon">🔶</span><span className="crypto-name">TRX</span></button>
+              <button className="crypto-btn" onClick={() => processPaymentWithCurrency('SOL')}><span className="crypto-icon">🟣</span><span className="crypto-name">SOL</span></button>
+              <button className="crypto-btn" onClick={() => processPaymentWithCurrency('USDC')}><span className="crypto-icon">💲</span><span className="crypto-name">USDC</span></button>
+              <button className="crypto-btn" onClick={() => processPaymentWithCurrency('DOGE')}><span className="crypto-icon">🐶</span><span className="crypto-name">DOGE</span></button>
             </div>
             <button className="claim-btn" onClick={() => setShowCurrencySelector(false)} style={{marginTop: '10px', background: '#555'}}>CANCELAR</button>
           </div>
         </div>
       )}
 
-      {/* MODAL CONFIRMACIÓN DE PAGO PLISIO (Automático) */}
+      {/* MODAL CONFIRMACIÓN DE PAGO PLISIO */}
       {paymentInfo && (
         <div className="payment-modal-overlay">
           <div className="payment-modal">
@@ -626,12 +630,16 @@ function App() {
               <div className="payment-modal">
                 <h3>Retirar Ganancias</h3>
                 <p>Saldo disponible: <strong>${(holdingWallet * KABUTO_PRICE_USD).toFixed(2)} USD</strong> ({holdingWallet.toFixed(2)} $KABUTO)</p>
-                <div className="currency-selector">
-                  <button className={withdrawCurrency === 'USDT' ? 'active' : ''} onClick={() => setWithdrawCurrency('USDT')}>USDT</button>
-                  <button className={withdrawCurrency === 'LTC' ? 'active' : ''} onClick={() => setWithdrawCurrency('LTC')}>LTC</button>
-                  <button className={withdrawCurrency === 'TON' ? 'active' : ''} onClick={() => setWithdrawCurrency('TON')}>TON</button>
-                  <button className={withdrawCurrency === 'TRX' ? 'active' : ''} onClick={() => setWithdrawCurrency('TRX')}>TRX</button>
-                  <button className={withdrawCurrency === 'DOGE' ? 'active' : ''} onClick={() => setWithdrawCurrency('DOGE')}>DOGE</button>
+                {/* SELECTOR DE MONEDAS MODERNO PARA RETIRO */}
+                <div className="crypto-grid">
+                  <button className={withdrawCurrency === 'USDT' ? 'crypto-btn active' : 'crypto-btn'} onClick={() => setWithdrawCurrency('USDT')}><span className="crypto-icon">💵</span><span className="crypto-name">USDT</span></button>
+                  <button className={withdrawCurrency === 'LTC' ? 'crypto-btn active' : 'crypto-btn'} onClick={() => setWithdrawCurrency('LTC')}><span className="crypto-icon">🪙</span><span className="crypto-name">LTC</span></button>
+                  <button className={withdrawCurrency === 'TON' ? 'crypto-btn active' : 'crypto-btn'} onClick={() => setWithdrawCurrency('TON')}><span className="crypto-icon">🟦</span><span className="crypto-name">TON</span></button>
+                  <button className={withdrawCurrency === 'TRX' ? 'crypto-btn active' : 'crypto-btn'} onClick={() => setWithdrawCurrency('TRX')}><span className="crypto-icon">🔶</span><span className="crypto-name">TRX</span></button>
+                  <button className={withdrawCurrency === 'DOGE' ? 'crypto-btn active' : 'crypto-btn'} onClick={() => setWithdrawCurrency('DOGE')}><span className="crypto-icon">🐶</span><span className="crypto-name">DOGE</span></button>
+                  <button className={withdrawCurrency === 'BNB' ? 'crypto-btn active' : 'crypto-btn'} onClick={() => setWithdrawCurrency('BNB')}><span className="crypto-icon">🟡</span><span className="crypto-name">BNB</span></button>
+                  <button className={withdrawCurrency === 'SOL' ? 'crypto-btn active' : 'crypto-btn'} onClick={() => setWithdrawCurrency('SOL')}><span className="crypto-icon">🟣</span><span className="crypto-name">SOL</span></button>
+                  <button className={withdrawCurrency === 'USDC' ? 'crypto-btn active' : 'crypto-btn'} onClick={() => setWithdrawCurrency('USDC')}><span className="crypto-icon">💲</span><span className="crypto-name">USDC</span></button>
                 </div>
                 <p className="payment-warning">Mínimo: {MIN_WITHDRAWAL_USD} USD | Comisión: {WITHDRAWAL_FEE} USD</p>
                 <div className="withdraw-input-box">

@@ -78,13 +78,15 @@ async function postNewUserToChannel(userName, userId) {
 
 async function processPlisioWithdrawal(userName, amountUsd, currency, address) {
   try {
-    let cryptoPriceUsd = 1; 
+    let cryptoPriceUsd = 1; // Por defecto para USDT y USDC
     let coingeckoId = '';
 
     if (currency === 'TON') coingeckoId = 'the-open-network';
     else if (currency === 'LTC') coingeckoId = 'litecoin';
     else if (currency === 'TRX') coingeckoId = 'tron';
     else if (currency === 'DOGE') coingeckoId = 'dogecoin';
+    else if (currency === 'BNB') coingeckoId = 'binancecoin';
+    else if (currency === 'SOL') coingeckoId = 'solana';
 
     if (coingeckoId) {
       const priceRes = await axios.get(`https://api.coingecko.com/api/v3/simple/price?ids=${coingeckoId}&vs_currencies=usd`);
@@ -109,6 +111,9 @@ async function processPlisioWithdrawal(userName, amountUsd, currency, address) {
       else if (currency === 'LTC') explorerUrl = `https://blockchair.com/litecoin/transaction/${txHash}`;
       else if (currency === 'USDT' || currency === 'TRX') explorerUrl = `https://tronscan.org/#/transaction/${txHash}`;
       else if (currency === 'DOGE') explorerUrl = `https://blockchair.com/dogecoin/transaction/${txHash}`;
+      else if (currency === 'BNB') explorerUrl = `https://bscscan.com/tx/${txHash}`;
+      else if (currency === 'SOL') explorerUrl = `https://solscan.io/tx/${txHash}`;
+      else if (currency === 'USDC') explorerUrl = `https://etherscan.io/tx/${txHash}`;
       
       const message = `💸 *RETIRO COMPLETADO*\n\n👤 *Usuario:* ${userName}\n💰 *Monto:* ${amountUsd} USD (${cryptoAmount} ${currency})\n🔗 *Dirección:* \`${address}\`\n🆔 *Tx Hash:* [Ver transacción en la blockchain](${explorerUrl})\n\n¡Pago procesado automáticamente vía Plisio! 🪲`;
       const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
@@ -155,7 +160,6 @@ app.post('/api/user/login', (req, res) => {
   res.json(user);
 });
 
-// NUEVA RUTA: Para que el frontend verifique si el pago ya fue confirmado
 app.get('/api/user/check_vip/:telegram_id', (req, res) => {
   const { telegram_id } = req.params;
   const user = db.prepare('SELECT is_vip, hash_power FROM users WHERE telegram_id = ?').get(telegram_id);
