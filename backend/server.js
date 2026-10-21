@@ -1,12 +1,11 @@
 // =====================================================
-// KABUTO MINER - SERVIDOR CON SUPABASE
+// KABUTO MINER v2.1 - SERVIDOR CON SUPABASE + WEBHOOK PLISIO
 // =====================================================
-// Reemplaza el server.js anterior con este archivo
-// Los datos ahora se guardan en Supabase (PostgreSQL)
-// y NUNCA se pierden cuando Render se reinicia.
+// Reemplaza backend/server.js con este archivo
 // =====================================================
 
 const express = require('express');
+const crypto = require('crypto');
 const cors = require('cors');
 const axios = require('axios');
 const { createClient } = require('@supabase/supabase-js');
@@ -16,22 +15,16 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // =====================================================
-// CONFIGURACIÓN SUPABASE
+// CONFIGURACIÓN
 // =====================================================
-const SUPABASE_URL = process.env.SUPABASE_URL || 'https://TU-PROYECTO.supabase.co';
-const SUPABASE_KEY = process.env.SUPABASE_KEY || 'TU-CLAVE-ANON';
+const SUPABASE_URL = process.env.SUPABASE_URL || '';
+const SUPABASE_KEY = process.env.SUPABASE_KEY || '';
+const PLISIO_API_KEY = process.env.PLISIO_API_KEY || '';
+const PLISIO_SECRET_KEY = process.env.PLISIO_SECRET_KEY || '';
+const ADMIN_TELEGRAM_ID = '1159596878';
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
-// =====================================================
-// CONFIGURACIÓN PLISIO
-// =====================================================
-const PLISIO_API_KEY = process.env.PLISIO_API_KEY || 'TU-API-KEY';
-const ADMIN_TELEGRAM_ID = '1159596878';
-
-// =====================================================
-// CONFIGURACIÓN PLANS VIP
-// =====================================================
 const VIP_PLANS = {
   1: { name: 'VIP 1', price: 1, hash_power: 50 },
   2: { name: 'VIP 2', price: 5, hash_power: 200 },
@@ -46,6 +39,9 @@ const SUPPORTED_CURRENCIES = ['USDT', 'TON', 'LTC', 'TRX', 'DOGE', 'BNB', 'SOL',
 // MIDDLEWARE
 // =====================================================
 app.use(cors());
+
+// Webhook Plisio necesita body crudo para verificar firma
+app.use('/api/plisio_webhook', express.raw({ type: '*/*' }));
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '../kabuto-game/dist')));
 
@@ -54,7 +50,6 @@ app.use(express.static(path.join(__dirname, '../kabuto-game/dist')));
 // =====================================================
 async function getOrCreateUser(telegramId, username = '', firstName = '') {
   try {
-    // Buscar usuario existente
     const { data: existing } = await supabase
       .from('users')
       .select('*')
@@ -62,7 +57,6 @@ async function getOrCreateUser(telegramId, username = '', firstName = '') {
       .single();
 
     if (existing) {
-      // Actualizar último login y nombre si cambió
       await supabase
         .from('users')
         .update({
@@ -74,7 +68,6 @@ async function getOrCreateUser(telegramId, username = '', firstName = '') {
       return existing;
     }
 
-    // Crear nuevo usuario
     const { data: newUser, error } = await supabase
       .from('users')
       .insert([{
@@ -99,24 +92,76 @@ async function getOrCreateUser(telegramId, username = '', firstName = '') {
 }
 
 // =====================================================
+// FUNCIÓN: Activar VIP (centralizada)
+// =====================================================
+async function activateVIP(telegramId, planName, invoiceId) {
+  try {
+    const { data: purchase } = await supabase
+      .from('purchases')
+      .select('*')
+      .eq('telegram_id', telegramId)
+      .eq('plan', planName)
+      .eq('status', 'pending')
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
+
+    if (!purchase) {
+      console.log('⚠️ No se encontró compra pendiente para', telegramId, planName);
+      return false;
+    }
+
+    const planId = Object.keys(VIP_PLANS).find(k => VIP_PLANS[k].name === planName);
+    if (!planId) return false;
+    const plan = VIP_PLANS[planId];
+
+    const { data: user } = await supabase
+      .from('users')
+      .select('*')
+      .eq('telegram_id', telegramId)
+      .single();
+
+    if (user) {
+      const newHashPower = user.hash_power + plan.hash_power;
+      const newVipLevel = Math.max(user.vip_level, parseInt(planId));
+
+      await supabase
+        .from('users')
+        .update({
+          hash_power: newHashPower,
+          vip_level: newVipLevel
+        })
+        .eq('telegram_id', telegramId);
+
+      console.log(`✅ VIP activado: ${telegramId} → ${planName} (HP: ${newHashPower})`);
+    }
+
+    await supabase
+      .from('purchases')
+      .update({
+        status: 'completed',
+        plisio_invoice_id: invoiceId
+      })
+      .eq('id', purchase.id);
+
+    return true;
+  } catch (err) {
+    console.error('Error activateVIP:', err);
+    return false;
+  }
+}
+
+// =====================================================
 // API: LOGIN
 // =====================================================
 app.post('/api/login', async (req, res) => {
   try {
     const { telegram_id, username, first_name } = req.body;
-
-    if (!telegram_id) {
-      return res.status(400).json({ error: 'telegram_id requerido' });
-    }
+    if (!telegram_id) return res.status(400).json({ error: 'telegram_id requerido' });
 
     const user = await getOrCreateUser(telegram_id, username, first_name);
-    if (!user) {
-      return res.status(500).json({ error: 'Error al crear/obtener usuario' });
-    }
-
-    if (user.banned) {
-      return res.status(403).json({ error: 'Usuario baneado' });
-    }
+    if (!user) return res.status(500).json({ error: 'Error al crear/obtener usuario' });
+    if (user.banned) return res.status(403).json({ error: 'Usuario baneado' });
 
     res.json({
       telegram_id: user.telegram_id,
@@ -135,15 +180,12 @@ app.post('/api/login', async (req, res) => {
 });
 
 // =====================================================
-// API: GUARDAR PROGRESO (cada 10s)
+// API: GUARDAR PROGRESO
 // =====================================================
 app.post('/api/save', async (req, res) => {
   try {
     const { telegram_id, balance, hash_power, total_mined } = req.body;
-
-    if (!telegram_id) {
-      return res.status(400).json({ error: 'telegram_id requerido' });
-    }
+    if (!telegram_id) return res.status(400).json({ error: 'telegram_id requerido' });
 
     const { error } = await supabase
       .from('users')
@@ -156,7 +198,6 @@ app.post('/api/save', async (req, res) => {
       .eq('telegram_id', telegram_id);
 
     if (error) throw error;
-
     res.json({ success: true });
   } catch (err) {
     console.error('Error save:', err);
@@ -165,7 +206,7 @@ app.post('/api/save', async (req, res) => {
 });
 
 // =====================================================
-// API: OBTENER ESTADO DEL JUGADOR
+// API: OBTENER ESTADO
 // =====================================================
 app.get('/api/state/:telegram_id', async (req, res) => {
   try {
@@ -175,9 +216,7 @@ app.get('/api/state/:telegram_id', async (req, res) => {
       .eq('telegram_id', req.params.telegram_id)
       .single();
 
-    if (!user) {
-      return res.status(404).json({ error: 'Usuario no encontrado' });
-    }
+    if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
 
     res.json({
       telegram_id: user.telegram_id,
@@ -212,17 +251,17 @@ app.post('/api/create_invoice', async (req, res) => {
     const user = await getOrCreateUser(telegram_id);
     if (!user) return res.status(400).json({ error: 'Usuario inválido' });
 
-    // Crear factura en Plisio
+    const orderNumber = `${telegram_id}_${plan_id}_${Date.now()}`;
+
     const response = await axios.post('https://plisio.net/api/v1/invoices/new', {
       source_currency: 'USD',
       source_amount: plan.price,
       currency: payCurrency,
       order_name: `Kabuto Miner - ${plan.name}`,
-      order_number: `${telegram_id}_${Date.now()}`,
-      callback_url: `https://kabutominer.onrender.com/api/plisio_webhook`,
+      order_number: orderNumber,
+      callback_url: 'https://kabutominer.onrender.com/api/plisio_webhook',
       success_callback_url: 'https://kabutominer.onrender.com/success',
       fail_callback_url: 'https://kabutominer.onrender.com/fail',
-      email: null
     }, {
       params: { api_key: PLISIO_API_KEY }
     });
@@ -231,19 +270,21 @@ app.post('/api/create_invoice', async (req, res) => {
       return res.status(400).json({ error: response.data.message || 'Error Plisio' });
     }
 
-    // Guardar compra en BD
+    const invoiceId = response.data.data.tx_id || response.data.data.id;
+
     await supabase.from('purchases').insert([{
       telegram_id: telegram_id,
       plan: plan.name,
       amount_usd: plan.price,
       currency: payCurrency,
-      plisio_invoice_id: response.data.data.tx_id || response.data.data.id,
+      plisio_invoice_id: invoiceId,
       status: 'pending'
     }]);
 
     res.json({
       invoice_url: response.data.data.invoice_url,
-      tx_id: response.data.data.tx_id,
+      tx_id: invoiceId,
+      order_number: orderNumber,
       amount: response.data.data.amount,
       currency: payCurrency,
       plan: plan
@@ -255,7 +296,7 @@ app.post('/api/create_invoice', async (req, res) => {
 });
 
 // =====================================================
-// API: VERIFICAR ESTADO DE FACTURA
+// API: VERIFICAR ESTADO DE FACTURA (frontend cada 5s)
 // =====================================================
 app.get('/api/check_invoice/:tx_id', async (req, res) => {
   try {
@@ -269,8 +310,23 @@ app.get('/api/check_invoice/:tx_id', async (req, res) => {
     }
 
     const op = response.data.data;
+    const status = op.status;
+
+    // Si está completada, activar VIP (fallback del webhook)
+    if (status === 'completed' || status === 'confirmed') {
+      const { data: purchase } = await supabase
+        .from('purchases')
+        .select('*')
+        .eq('plisio_invoice_id', req.params.tx_id)
+        .single();
+
+      if (purchase && purchase.status === 'pending') {
+        await activateVIP(purchase.telegram_id, purchase.plan, req.params.tx_id);
+      }
+    }
+
     res.json({
-      status: op.status,
+      status: status,
       tx_id: op.tx_id,
       amount: op.amount,
       currency: op.currency
@@ -282,60 +338,60 @@ app.get('/api/check_invoice/:tx_id', async (req, res) => {
 });
 
 // =====================================================
-// WEBHOOK PLISIO (activación automática VIP)
+// WEBHOOK PLISIO (con verificación de firma opcional)
 // =====================================================
 app.post('/api/plisio_webhook', async (req, res) => {
   try {
-    console.log('Webhook Plisio:', req.body);
-    const { tx_id, status, order_number } = req.body;
+    console.log('🔔 Webhook Plisio recibido');
 
-    if (status === 'completed' || status === 'confirmed') {
-      // Buscar compra por invoice_id
-      const { data: purchase } = await supabase
-        .from('purchases')
-        .select('*')
-        .eq('plisio_invoice_id', tx_id)
-        .single();
-
-      if (purchase && purchase.status === 'pending') {
-        const planId = Object.keys(VIP_PLANS).find(
-          k => VIP_PLANS[k].name === purchase.plan
-        );
-        const plan = VIP_PLANS[planId];
-
-        // Actualizar usuario: sumar hash power y nivel VIP
-        const { data: user } = await supabase
-          .from('users')
-          .select('*')
-          .eq('telegram_id', purchase.telegram_id)
-          .single();
-
-        if (user) {
-          const newHashPower = user.hash_power + plan.hash_power;
-          const newVipLevel = Math.max(user.vip_level, parseInt(planId));
-
-          await supabase
-            .from('users')
-            .update({
-              hash_power: newHashPower,
-              vip_level: newVipLevel
-            })
-            .eq('telegram_id', user.telegram_id);
-        }
-
-        // Marcar compra como completada
-        await supabase
-          .from('purchases')
-          .update({ status: 'completed' })
-          .eq('id', purchase.id);
-
-        console.log(`✅ VIP activado para ${purchase.telegram_id}: ${purchase.plan}`);
+    let body = req.body;
+    if (Buffer.isBuffer(body)) {
+      const raw = body.toString('utf8');
+      try {
+        body = JSON.parse(raw);
+      } catch {
+        const params = new URLSearchParams(raw);
+        body = Object.fromEntries(params);
       }
     }
 
-    res.json({ status: 'ok' });
+    console.log('📦 Datos:', JSON.stringify(body, null, 2));
+
+    // Verificación de firma (opcional, si configuraste PLISIO_SECRET_KEY)
+    if (PLISIO_SECRET_KEY && body.verify_hash) {
+      const verifyHash = body.verify_hash;
+      delete body.verify_hash;
+      const dataString = JSON.stringify(body);
+      const expectedHash = crypto
+        .createHmac('sha256', PLISIO_SECRET_KEY)
+        .update(dataString)
+        .digest('hex');
+
+      if (expectedHash !== verifyHash) {
+        console.error('❌ Firma inválida en webhook');
+        return res.status(401).json({ error: 'Firma inválida' });
+      }
+      console.log('✅ Firma verificada correctamente');
+    }
+
+    const { tx_id, status, order_number } = body;
+
+    if (status === 'completed' || status === 'confirmed') {
+      if (order_number) {
+        const parts = order_number.split('_');
+        const telegramId = parts[0];
+        const planId = parts[1];
+
+        if (telegramId && planId && VIP_PLANS[planId]) {
+          await activateVIP(telegramId, VIP_PLANS[planId].name, tx_id);
+          console.log(`✅ Webhook procesado: ${telegramId} → ${VIP_PLANS[planId].name}`);
+        }
+      }
+    }
+
+    res.status(200).json({ status: 'ok' });
   } catch (err) {
-    console.error('Error webhook:', err);
+    console.error('❌ Error webhook:', err);
     res.status(500).json({ error: 'Error webhook' });
   }
 });
@@ -347,7 +403,6 @@ app.post('/api/complete_task', async (req, res) => {
   try {
     const { telegram_id, task_id, reward } = req.body;
 
-    // Verificar si ya completó la tarea
     const { data: existing } = await supabase
       .from('tasks_completed')
       .select('*')
@@ -355,18 +410,14 @@ app.post('/api/complete_task', async (req, res) => {
       .eq('task_id', task_id)
       .single();
 
-    if (existing) {
-      return res.json({ success: false, message: 'Ya completada' });
-    }
+    if (existing) return res.json({ success: false, message: 'Ya completada' });
 
-    // Guardar tarea completada
     await supabase.from('tasks_completed').insert([{
       telegram_id: telegram_id,
       task_id: task_id,
       reward: reward
     }]);
 
-    // Sumar recompensa al balance
     const { data: user } = await supabase
       .from('users')
       .select('*')
@@ -409,30 +460,24 @@ app.get('/api/tasks/:telegram_id', async (req, res) => {
 app.post('/api/register_referral', async (req, res) => {
   try {
     const { referrer_id, referred_id } = req.body;
-
     if (referrer_id === referred_id) {
       return res.json({ success: false, message: 'No puedes referirte a ti mismo' });
     }
 
-    // Verificar que el referido no tenga ya un referente
     const { data: existing } = await supabase
       .from('referrals')
       .select('*')
       .eq('referred_id', referred_id)
       .single();
 
-    if (existing) {
-      return res.json({ success: false, message: 'Ya tiene referente' });
-    }
+    if (existing) return res.json({ success: false, message: 'Ya tiene referente' });
 
-    // Crear referencia
     await supabase.from('referrals').insert([{
       referrer_id: referrer_id,
       referred_id: referred_id,
       commission: 0
     }]);
 
-    // Dar bono de bienvenida al referido (10% del primer depósito cuando haga)
     res.json({ success: true });
   } catch (err) {
     console.error('Error referral:', err);
@@ -447,17 +492,11 @@ app.post('/api/withdraw', async (req, res) => {
   try {
     const { telegram_id, amount, currency, address } = req.body;
 
-    // Validar moneda
     if (!SUPPORTED_CURRENCIES.includes(currency)) {
       return res.status(400).json({ error: 'Moneda no soportada' });
     }
+    if (amount < 1) return res.status(400).json({ error: 'Mínimo $1' });
 
-    // Validar monto mínimo
-    if (amount < 1) {
-      return res.status(400).json({ error: 'Mínimo $1' });
-    }
-
-    // Obtener usuario
     const { data: user } = await supabase
       .from('users')
       .select('*')
@@ -465,11 +504,8 @@ app.post('/api/withdraw', async (req, res) => {
       .single();
 
     if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
-    if (user.balance < amount) {
-      return res.status(400).json({ error: 'Saldo insuficiente' });
-    }
+    if (user.balance < amount) return res.status(400).json({ error: 'Saldo insuficiente' });
 
-    // Crear retiro en Plisio
     const response = await axios.post('https://plisio.net/api/v1/withdraw', {
       currency: currency,
       amount: amount,
@@ -482,13 +518,11 @@ app.post('/api/withdraw', async (req, res) => {
       return res.status(400).json({ error: response.data.message || 'Error retiro' });
     }
 
-    // Restar del balance del usuario
     await supabase
       .from('users')
       .update({ balance: user.balance - amount })
       .eq('telegram_id', telegram_id);
 
-    // Guardar retiro en BD
     await supabase.from('withdrawals').insert([{
       telegram_id: telegram_id,
       amount: amount,
@@ -519,25 +553,17 @@ app.get('/api/admin/stats', async (req, res) => {
       return res.status(403).json({ error: 'No autorizado' });
     }
 
-    // Obtener todos los usuarios
     const { data: users } = await supabase.from('users').select('*');
-
-    // Obtener todas las compras completadas
     const { data: purchases } = await supabase
       .from('purchases')
       .select('*')
       .eq('status', 'completed');
-
-    // Obtener todos los retiros
     const { data: withdrawals } = await supabase.from('withdrawals').select('*');
 
-    // Calcular ingresos totales
     const totalIncome = (purchases || []).reduce((sum, p) => sum + p.amount_usd, 0);
     const totalWithdrawn = (withdrawals || []).reduce((sum, w) => sum + w.amount, 0);
     const liquidity = totalIncome * 0.70;
     const adminProfit = totalIncome * 0.30;
-
-    // Total en balances de usuarios
     const totalBalance = (users || []).reduce((sum, u) => sum + u.balance, 0);
 
     res.json({
@@ -558,7 +584,7 @@ app.get('/api/admin/stats', async (req, res) => {
 });
 
 // =====================================================
-// API: BANEAR USUARIO (admin)
+// API: BANEAR USUARIO
 // =====================================================
 app.post('/api/admin/ban', async (req, res) => {
   try {
@@ -579,27 +605,87 @@ app.post('/api/admin/ban', async (req, res) => {
 });
 
 // =====================================================
-// PÁGINAS DE ÉXITO/FRACASO PLISIO
+// API: ACTIVAR VIP MANUAL (admin fallback)
+// =====================================================
+app.post('/api/admin/activate_vip', async (req, res) => {
+  try {
+    const { admin_id, telegram_id, plan_id } = req.body;
+    if (admin_id !== ADMIN_TELEGRAM_ID) {
+      return res.status(403).json({ error: 'No autorizado' });
+    }
+
+    const plan = VIP_PLANS[plan_id];
+    if (!plan) return res.status(400).json({ error: 'Plan inválido' });
+
+    const { data: user } = await supabase
+      .from('users')
+      .select('*')
+      .eq('telegram_id', telegram_id)
+      .single();
+
+    if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
+
+    const newHashPower = user.hash_power + plan.hash_power;
+    const newVipLevel = Math.max(user.vip_level, parseInt(plan_id));
+
+    await supabase
+      .from('users')
+      .update({
+        hash_power: newHashPower,
+        vip_level: newVipLevel
+      })
+      .eq('telegram_id', telegram_id);
+
+    await supabase.from('purchases').insert([{
+      telegram_id: telegram_id,
+      plan: plan.name,
+      amount_usd: plan.price,
+      currency: 'MANUAL',
+      plisio_invoice_id: `manual_${Date.now()}`,
+      status: 'completed'
+    }]);
+
+    res.json({
+      success: true,
+      new_hash_power: newHashPower,
+      new_vip_level: newVipLevel
+    });
+  } catch (err) {
+    console.error('Error activate_vip manual:', err);
+    res.status(500).json({ error: 'Error' });
+  }
+});
+
+// =====================================================
+// PÁGINAS DE ÉXITO/FRACASO
 // =====================================================
 app.get('/success', (req, res) => {
-  res.send('<html><body style="background:#0d1117;color:#fff;font-family:Arial;text-align:center;padding:50px"><h1>✅ Pago Confirmado</h1><p>Tu plan VIP ha sido activado. Cierra esta ventana y vuelve a Kabuto Miner.</p></body></html>');
+  res.send(`<html><body style="background:#0d1117;color:#fff;font-family:Arial;text-align:center;padding:50px">
+    <h1 style="color:#3fb950">✅ Pago Confirmado</h1>
+    <p>Tu plan VIP está siendo activado. Cierra esta ventana y vuelve a Kabuto Miner.</p>
+    <p style="color:#8b949e">Si tu VIP no aparece en 30 segundos, vuelve a abrir el juego.</p>
+  </body></html>`);
 });
 
 app.get('/fail', (req, res) => {
-  res.send('<html><body style="background:#0d1117;color:#fff;font-family:Arial;text-align:center;padding:50px"><h1>❌ Pago Fallido</h1><p>El pago no se completó. Intenta nuevamente.</p></body></html>');
+  res.send(`<html><body style="background:#0d1117;color:#fff;font-family:Arial;text-align:center;padding:50px">
+    <h1 style="color:#f85149">❌ Pago Fallido</h1>
+    <p>El pago no se completó. Intenta nuevamente desde Kabuto Miner.</p>
+  </body></html>`);
 });
 
 // =====================================================
-// SERVIR FRONTEND (React)
+// SERVIR FRONTEND
 // =====================================================
 app.use((req, res) => {
   res.sendFile(path.join(__dirname, '../kabuto-game/dist/index.html'));
 });
 
 // =====================================================
-// INICIAR SERVIDOR
+// INICIAR
 // =====================================================
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🦏 Kabuto Miner corriendo en puerto ${PORT}`);
+  console.log(`🦏 Kabuto Miner v2.1 corriendo en puerto ${PORT}`);
   console.log(`📊 Base de datos: Supabase`);
+  console.log(`🔔 Webhook Plisio: https://kabutominer.onrender.com/api/plisio_webhook`);
 });
