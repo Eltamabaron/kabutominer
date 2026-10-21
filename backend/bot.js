@@ -1,11 +1,11 @@
 // =====================================================
-// KABUTO MINER - BOT DE TELEGRAM (v2 - CON CANAL DE TRANSPARENCIA)
+// KABUTO MINER - BOT DE TELEGRAM (v2.4 - FIX 409 CONFLICT)
 // =====================================================
-// Incluye:
-// - Comandos /start /help /play /referral /rules /support
-// - Notificaciones de VIP activado y retiros
-// - Publicación en canal de transparencia @kabuto_payments
-// - Resumen diario automático a las 00:00 UTC
+// Mejoras vs versión anterior:
+// ✅ deleteWebhook() antes de arrancar (limpia webhooks viejos)
+// ✅ dropPendingUpdates al iniciar (evita conflictos iniciales)
+// ✅ Reconexión automática en caso de error 409
+// ✅ Backoff exponencial para no saturar la API
 // =====================================================
 
 const TelegramBot = require('node-telegram-bot-api');
@@ -15,7 +15,7 @@ const axios = require('axios');
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
 const WEBAPP_URL = process.env.WEBAPP_URL || 'https://kabutominer.onrender.com';
 const ADMIN_ID = '1159596878';
-const CHANNEL_USERNAME = 'kabuto_payments'; // sin @
+const CHANNEL_USERNAME = 'kabuto_payments';
 const CHANNEL_URL = `https://t.me/${CHANNEL_USERNAME}`;
 const SUPPORT_URL = 'https://t.me/Kabutominer_support';
 const SUPABASE_URL = process.env.SUPABASE_URL || '';
@@ -28,29 +28,110 @@ let postToChannelFn = async () => {};
 let getChannelStatsFn = async () => ({});
 
 // =====================================================
-// INICIAR BOT
+// INICIAR BOT CON FIX ANTI-409
 // =====================================================
 if (!BOT_TOKEN) {
   console.warn('⚠️ TELEGRAM_BOT_TOKEN no configurado. Bot desactivado.');
 } else {
-  bot = new TelegramBot(BOT_TOKEN, {
-    polling: {
-      interval: 1000,
-      autoStart: true,
-      params: { timeout: 30 }
-    }
-  });
+  startBotWithRetry();
+}
 
-  console.log('🤖 Bot de Telegram iniciado correctamente');
-  setupBotFeatures();
-  setupDailySummary();
+async function startBotWithRetry() {
+  try {
+    // 🆕 PASO 1: Eliminar cualquier webhook previo (evita 409)
+    console.log('🧹 Limpiando webhooks previos...');
+    const webhookInfo = await axios.get(
+      `https://api.telegram.org/bot${BOT_TOKEN}/getWebhookInfo`
+    );
+    if (webhookInfo.data.result.url) {
+      console.log('⚠️ Webhook detectado, eliminando...');
+      await axios.post(`https://api.telegram.org/bot${BOT_TOKEN}/deleteWebhook`);
+      console.log('✅ Webhook eliminado');
+    }
+
+    // 🆕 PASO 2: Eliminar updates pendientes (evita procesar mensajes viejos)
+    console.log('🧹 Eliminando updates pendientes...');
+    await axios.get(
+      `https://api.telegram.org/bot${BOT_TOKEN}/getUpdates?offset=-1`
+    );
+    console.log('✅ Updates limpios');
+
+    // 🆕 PASO 3: Esperar 2 segundos para que cualquier instancia vieja muera
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
+    // PASO 4: Crear bot con polling
+    bot = new TelegramBot(BOT_TOKEN, {
+      polling: {
+        interval: 1500,
+        autoStart: false, // 🆕 Arrancamos manualmente
+        params: { timeout: 30 }
+      }
+    });
+
+    // 🆕 PASO 5: Manejar errores de polling con reconexión
+    let retryCount = 0;
+    let isRestarting = false;
+
+    bot.on('polling_error', async (err) => {
+      const errorMsg = err.message || '';
+      console.error('❌ Error polling:', errorMsg);
+
+      // Si es 409 Conflict, esperar y reiniciar
+      if (errorMsg.includes('409') && !isRestarting) {
+        isRestarting = true;
+        retryCount++;
+        const waitTime = Math.min(5000 * retryCount, 30000); // max 30s
+        console.log(`🔄 409 Conflict detectado. Esperando ${waitTime/1000}s antes de reintentar (intento ${retryCount})...`);
+
+        try {
+          await bot.stopPolling();
+        } catch (e) {}
+
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+
+        try {
+          // Limpiar updates nuevamente
+          await axios.get(
+            `https://api.telegram.org/bot${BOT_TOKEN}/getUpdates?offset=-1`
+          );
+          await bot.startPolling({ restart: true });
+          console.log('✅ Polling reiniciado correctamente');
+          // Resetear contador tras éxito
+          setTimeout(() => {
+            retryCount = 0;
+            isRestarting = false;
+          }, 60000);
+        } catch (e) {
+          console.error('❌ Error al reiniciar polling:', e.message);
+          // Reintento más largo
+          setTimeout(() => {
+            isRestarting = false;
+          }, 60000);
+        }
+      }
+    });
+
+    bot.on('error', (err) => {
+      console.error('❌ Error bot:', err.message);
+    });
+
+    // 🆕 PASO 6: Iniciar polling manualmente
+    console.log('🤖 Iniciando polling del bot...');
+    await bot.startPolling();
+    console.log('🤖 Bot de Telegram iniciado correctamente');
+
+    setupBotFeatures();
+    setupDailySummary();
+  } catch (err) {
+    console.error('❌ Error iniciando bot:', err.message);
+    console.log('🔄 Reintentando en 10 segundos...');
+    setTimeout(startBotWithRetry, 10000);
+  }
 }
 
 // =====================================================
 // FUNCIONES AUXILIARES
 // =====================================================
-
-// Formatear fecha relativa
 function timeAgo(date) {
   const seconds = Math.floor((Date.now() - new Date(date).getTime()) / 1000);
   if (seconds < 60) return 'hace un momento';
@@ -230,7 +311,7 @@ ${referrerId && referrerId !== telegramId ? '🔗 *Entraste por invitación de u
 
     const refText = `🎫 *Tu enlace de referido*
 
-Comparte este enlace:
+Comparte este enlace con tus amigos:
 
 🔗 \`${refLink}\`
 
@@ -390,17 +471,6 @@ Verifica tu dirección antes de retirar.
   });
 
   // =====================================================
-  // MANEJO DE ERRORES
-  // =====================================================
-  bot.on('polling_error', (err) => {
-    console.error('❌ Error polling bot:', err.message);
-  });
-
-  bot.on('error', (err) => {
-    console.error('❌ Error bot:', err.message);
-  });
-
-  // =====================================================
   // FUNCIONES DE NOTIFICACIÓN
   // =====================================================
   notifyVIPActivatedFn = async (telegramId, planName, hashPowerGained) => {
@@ -445,9 +515,6 @@ Verifica tu dirección antes de retirar.
     }
   };
 
-  // =====================================================
-  // PUBLICAR EN CANAL DE TRANSPARENCIA
-  // =====================================================
   postToChannelFn = async (text, options = {}) => {
     try {
       await bot.sendMessage(`@${CHANNEL_USERNAME}`, text, {
@@ -462,9 +529,6 @@ Verifica tu dirección antes de retirar.
     }
   };
 
-  // =====================================================
-  // OBTENER ESTADÍSTICAS PÚBLICAS
-  // =====================================================
   getChannelStatsFn = async () => {
     try {
       const response = await axios.get(`${WEBAPP_URL}/api/public_stats`);
@@ -484,12 +548,11 @@ Verifica tu dirección antes de retirar.
 }
 
 // =====================================================
-// RESUMEN DIARIO AUTOMÁTICO (cada 24h)
+// RESUMEN DIARIO AUTOMÁTICO
 // =====================================================
 function setupDailySummary() {
   if (!bot) return;
 
-  // Calcular próximo mediodía UTC
   function getNextNoon() {
     const now = new Date();
     const tomorrow = new Date(now);
@@ -524,7 +587,6 @@ function setupDailySummary() {
       await postToChannelFn(summary);
       console.log('📊 Resumen diario publicado');
 
-      // Programar el siguiente
       const msUntilNext = getNextNoon() - new Date();
       setTimeout(sendDailySummary, msUntilNext);
     } catch (err) {
@@ -532,7 +594,6 @@ function setupDailySummary() {
     }
   }
 
-  // Programar primer resumen
   const msUntilNext = getNextNoon() - new Date();
   setTimeout(sendDailySummary, msUntilNext);
   console.log(`📊 Próximo resumen diario en ${Math.floor(msUntilNext / 3600000)} horas`);
