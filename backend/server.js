@@ -1,7 +1,5 @@
 // =====================================================
-// KABUTO MINER v2.2 - SERVIDOR + BOT DE TELEGRAM
-// =====================================================
-// Integra: Express + Supabase + Plisio Webhook + Bot de Telegram
+// KABUTO MINER v2.3 - SERVIDOR + BOT + CANAL DE TRANSPARENCIA
 // =====================================================
 
 const express = require('express');
@@ -11,7 +9,6 @@ const axios = require('axios');
 const { createClient } = require('@supabase/supabase-js');
 const path = require('path');
 
-// Importar el bot de Telegram (se inicializa solo si hay token)
 const { notifyVIPActivated, notifyWithdrawal, postToChannel } = require('./bot');
 
 const app = express();
@@ -93,7 +90,7 @@ async function getOrCreateUser(telegramId, username = '', firstName = '') {
 }
 
 // =====================================================
-// FUNCIÓN: Activar VIP (notifica al bot)
+// FUNCIÓN: Activar VIP (con notificaciones)
 // =====================================================
 async function activateVIP(telegramId, planName, invoiceId) {
   try {
@@ -136,12 +133,26 @@ async function activateVIP(telegramId, planName, invoiceId) {
 
       console.log(`✅ VIP activado: ${telegramId} → ${planName} (HP: ${newHashPower})`);
 
-      // 🆕 Notificar al usuario via Telegram
+      // Notificar al usuario via Telegram
       await notifyVIPActivated(telegramId, planName, plan.hash_power);
 
-      // 🆕 Publicar en canal de transparencia
+      // 📢 Publicar en canal de transparencia (sin exponer telegram_id)
+      const maskedName = user.username
+        ? `@${user.username}`
+        : (user.first_name || 'Anónimo');
+
       await postToChannel(
-        `🦏 *Nueva compra VIP*\n\n👤 Usuario: ${user.username || user.first_name}\n📦 Plan: *${planName}*\n💰 Monto: *$${plan.price}*\n⚡ Hash Power: +${plan.hash_power} H/s`
+        `🦏 *Nueva compra VIP confirmada*
+
+📦 Plan: *${planName}*
+💰 Monto: *$${plan.price} USD*
+💱 Moneda: ${purchase.currency}
+⚡ Hash Power añadido: *+${plan.hash_power} H/s*
+👤 Usuario: ${maskedName}
+🕐 Hora: ${new Date().toUTCString()}
+
+✅ Pago verificado vía Plisio
+📊 Reserva de liquidez: 70% / 30%`
       );
     }
 
@@ -493,7 +504,7 @@ app.post('/api/register_referral', async (req, res) => {
 });
 
 // =====================================================
-// API: SOLICITAR RETIRO (con notificación al bot)
+// API: SOLICITAR RETIRO (con publicación en canal)
 // =====================================================
 app.post('/api/withdraw', async (req, res) => {
   try {
@@ -541,12 +552,26 @@ app.post('/api/withdraw', async (req, res) => {
       txid: txid
     }]);
 
-    // 🆕 Notificar al usuario
+    // Notificar al usuario
     await notifyWithdrawal(telegram_id, amount, currency, txid);
 
-    // 🆕 Publicar en canal de transparencia
+    // 📢 Publicar en canal de transparencia
+    const maskedName = user.username ? `@${user.username}` : (user.first_name || 'Anónimo');
+    const maskedAddress = address.length > 12
+      ? `${address.substring(0, 8)}...${address.substring(address.length - 6)}`
+      : address;
+
     await postToChannel(
-      `💸 *Retiro procesado*\n\n👤 Usuario: ${user.username || user.first_name}\n💰 Monto: *$${amount} ${currency}*\n🔗 TXID: \`${txid || 'pending'}\``
+      `💸 *Retiro procesado*
+
+👤 Usuario: ${maskedName}
+💰 Monto: *$${amount} ${currency}*
+📍 Dirección: \`${maskedAddress}\`
+🔗 TXID: \`${txid || 'pending'}\`
+🕐 Hora: ${new Date().toUTCString()}
+
+✅ Enviado vía Plisio
+📊 Saldo restante en reservas: 70%`
     );
 
     res.json({
@@ -557,6 +582,38 @@ app.post('/api/withdraw', async (req, res) => {
   } catch (err) {
     console.error('Error withdraw:', err.response?.data || err.message);
     res.status(500).json({ error: 'Error al procesar retiro' });
+  }
+});
+
+// =====================================================
+// API: ESTADÍSTICAS PÚBLICAS (sin exponer datos sensibles)
+// =====================================================
+app.get('/api/public_stats', async (req, res) => {
+  try {
+    const { data: users } = await supabase.from('users').select('hash_power, vip_level, total_mined');
+    const { data: purchases } = await supabase
+      .from('purchases')
+      .select('amount_usd')
+      .eq('status', 'completed');
+    const { data: withdrawals } = await supabase.from('withdrawals').select('amount');
+
+    const totalIncome = (purchases || []).reduce((sum, p) => sum + p.amount_usd, 0);
+    const totalWithdrawn = (withdrawals || []).reduce((sum, w) => sum + w.amount, 0);
+    const totalHashPower = (users || []).reduce((sum, u) => sum + u.hash_power, 0);
+
+    res.json({
+      total_users: users?.length || 0,
+      total_income: parseFloat(totalIncome.toFixed(2)),
+      total_withdrawn: parseFloat(totalWithdrawn.toFixed(2)),
+      liquidity: parseFloat((totalIncome * 0.70).toFixed(2)),
+      admin_profit: parseFloat((totalIncome * 0.30).toFixed(2)),
+      total_purchases: purchases?.length || 0,
+      total_hash_power: parseFloat(totalHashPower.toFixed(2)),
+      last_update: new Date().toISOString()
+    });
+  } catch (err) {
+    console.error('Error public_stats:', err);
+    res.status(500).json({ error: 'Error' });
   }
 });
 
@@ -662,7 +719,6 @@ app.post('/api/admin/activate_vip', async (req, res) => {
       status: 'completed'
     }]);
 
-    // Notificar al usuario
     await notifyVIPActivated(telegram_id, plan.name, plan.hash_power);
 
     res.json({
@@ -683,15 +739,174 @@ app.get('/success', (req, res) => {
   res.send(`<html><body style="background:#0d1117;color:#fff;font-family:Arial;text-align:center;padding:50px">
     <h1 style="color:#3fb950">✅ Pago Confirmado</h1>
     <p>Tu plan VIP está siendo activado. Cierra esta ventana y vuelve a Kabuto Miner.</p>
-    <p style="color:#8b949e">Si tu VIP no aparece en 30 segundos, vuelve a abrir el juego.</p>
   </body></html>`);
 });
 
 app.get('/fail', (req, res) => {
   res.send(`<html><body style="background:#0d1117;color:#fff;font-family:Arial;text-align:center;padding:50px">
     <h1 style="color:#f85149">❌ Pago Fallido</h1>
-    <p>El pago no se completó. Intenta nuevamente desde Kabuto Miner.</p>
+    <p>El pago no se completó. Intenta nuevamente.</p>
   </body></html>`);
+});
+
+// =====================================================
+// PÁGINA DE TRANSPARENCIA PÚBLICA
+// =====================================================
+app.get('/transparency', (req, res) => {
+  res.send(`<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kabuto Miner - Transparencia</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  background:#0d1117;
+  color:#fff;
+  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;
+  min-height:100vh;
+  padding:20px;
+}
+.container { max-width:800px; margin:0 auto; }
+header { text-align:center; margin-bottom:30px; }
+.logo { font-size:48px; }
+h1 { font-size:28px; margin-top:10px; color:#3fb950; }
+.subtitle { color:#8b949e; margin-top:5px; }
+.stats-grid {
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+  gap:15px;
+  margin:20px 0;
+}
+.stat-card {
+  background:#161b22;
+  border:1px solid #30363d;
+  border-radius:10px;
+  padding:20px;
+  text-align:center;
+}
+.stat-card .icon { font-size:32px; }
+.stat-card .value { font-size:24px; font-weight:bold; margin:8px 0; color:#3fb950; }
+.stat-card .label { color:#8b949e; font-size:14px; }
+.split-section {
+  background:#161b22;
+  border:1px solid #30363d;
+  border-radius:10px;
+  padding:20px;
+  margin:20px 0;
+}
+.split-bar {
+  display:flex;
+  height:30px;
+  border-radius:5px;
+  overflow:hidden;
+  margin-top:10px;
+}
+.split-70 { background:#3fb950; width:70%; display:flex; align-items:center; justify-content:center; font-weight:bold; }
+.split-30 { background:#f78166; width:30%; display:flex; align-items:center; justify-content:center; font-weight:bold; }
+.section-title { font-size:18px; margin:20px 0 10px; }
+.channel-link {
+  display:inline-block;
+  background:#238636;
+  color:#fff;
+  padding:12px 24px;
+  border-radius:6px;
+  text-decoration:none;
+  margin-top:15px;
+  font-weight:bold;
+}
+.refresh-info { text-align:center; color:#8b949e; font-size:12px; margin-top:20px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <div class="logo">🦏</div>
+    <h1>Kabuto Miner - Panel de Transparencia</h1>
+    <p class="subtitle">Estadísticas financieras en tiempo real</p>
+  </header>
+
+  <div class="stats-grid" id="stats">
+    <div class="stat-card">
+      <div class="icon">👥</div>
+      <div class="value" id="total_users">-</div>
+      <div class="label">Usuarios</div>
+    </div>
+    <div class="stat-card">
+      <div class="icon">💰</div>
+      <div class="value" id="total_income">-</div>
+      <div class="label">Ingresos totales</div>
+    </div>
+    <div class="stat-card">
+      <div class="icon">💸</div>
+      <div class="value" id="total_withdrawn">-</div>
+      <div class="label">Retiros pagados</div>
+    </div>
+    <div class="stat-card">
+      <div class="icon">📦</div>
+      <div class="value" id="total_purchases">-</div>
+      <div class="label">Compras VIP</div>
+    </div>
+    <div class="stat-card">
+      <div class="icon">⚡</div>
+      <div class="value" id="total_hash_power">-</div>
+      <div class="label">Hash Power total</div>
+    </div>
+    <div class="stat-card">
+      <div class="icon">💵</div>
+      <div class="value" id="liquidity">-</div>
+      <div class="label">Liquidez disponible</div>
+    </div>
+  </div>
+
+  <div class="split-section">
+    <h3 class="section-title">📊 Distribución financiera (Split 30/70)</h3>
+    <p style="color:#8b949e;margin-bottom:10px">De todos los ingresos, 70% se reserva para pagar retiros de usuarios, 30% para mantenimiento y ganancia del admin.</p>
+    <div class="split-bar">
+      <div class="split-70">70% Retiros</div>
+      <div class="split-30">30% Admin</div>
+    </div>
+    <div style="display:flex;justify-content:space-between;margin-top:10px">
+      <div><strong style="color:#3fb950">$<span id="liquidity_70">0</span></strong> reservado</div>
+      <div><strong style="color:#f78166">$<span id="admin_profit_30">0</span></strong> admin</div>
+    </div>
+  </div>
+
+  <div style="text-align:center;margin-top:30px">
+    <p style="color:#8b949e">📢 Cada pago y retiro se publica automáticamente en nuestro canal de Telegram</p>
+    <a href="https://t.me/kabuto_payments" class="channel-link">Ver canal @kabuto_payments</a>
+  </div>
+
+  <div class="refresh-info">
+    Última actualización: <span id="last_update">-</span><br>
+    Se actualiza automáticamente cada 30 segundos
+  </div>
+</div>
+
+<script>
+async function loadStats() {
+  try {
+    const r = await fetch('/api/public_stats');
+    const d = await r.json();
+    document.getElementById('total_users').textContent = d.total_users;
+    document.getElementById('total_income').textContent = '$' + d.total_income.toFixed(2);
+    document.getElementById('total_withdrawn').textContent = '$' + d.total_withdrawn.toFixed(2);
+    document.getElementById('total_purchases').textContent = d.total_purchases;
+    document.getElementById('total_hash_power').textContent = d.total_hash_power.toFixed(0) + ' H/s';
+    document.getElementById('liquidity').textContent = '$' + d.liquidity.toFixed(2);
+    document.getElementById('liquidity_70').textContent = d.liquidity.toFixed(2);
+    document.getElementById('admin_profit_30').textContent = d.admin_profit.toFixed(2);
+    document.getElementById('last_update').textContent = new Date(d.last_update).toLocaleString('es-ES');
+  } catch (e) {
+    console.error('Error:', e);
+  }
+}
+loadStats();
+setInterval(loadStats, 30000);
+</script>
+</body>
+</html>`);
 });
 
 // =====================================================
@@ -705,8 +920,10 @@ app.use((req, res) => {
 // INICIAR
 // =====================================================
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🦏 Kabuto Miner v2.2 corriendo en puerto ${PORT}`);
+  console.log(`🦏 Kabuto Miner v2.3 corriendo en puerto ${PORT}`);
   console.log(`📊 Base de datos: Supabase`);
   console.log(`🔔 Webhook Plisio: https://kabutominer.onrender.com/api/plisio_webhook`);
   console.log(`🤖 Bot de Telegram: activo`);
+  console.log(`📢 Canal de transparencia: @kabuto_payments`);
+  console.log(`🌐 Panel público: https://kabutominer.onrender.com/transparency`);
 });

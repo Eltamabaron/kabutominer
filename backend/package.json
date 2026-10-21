@@ -1,7 +1,7 @@
 {
   "name": "kabuto-miner-backend",
-  "version": "2.2.0",
-  "description": "Backend de Kabuto Miner con Supabase + Bot de Telegram",
+  "version": "2.3.0",
+  "description": "Backend de Kabuto Miner con Supabase + Bot + Canal de Transparencia",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"

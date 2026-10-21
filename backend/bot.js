@@ -1,8 +1,11 @@
 // =====================================================
-// KABUTO MINER - BOT DE TELEGRAM
+// KABUTO MINER - BOT DE TELEGRAM (v2 - CON CANAL DE TRANSPARENCIA)
 // =====================================================
-// Este archivo maneja TODA la lógica del bot de Telegram
-// Se importa desde server.js automáticamente
+// Incluye:
+// - Comandos /start /help /play /referral /rules /support
+// - Notificaciones de VIP activado y retiros
+// - Publicación en canal de transparencia @kabuto_payments
+// - Resumen diario automático a las 00:00 UTC
 // =====================================================
 
 const TelegramBot = require('node-telegram-bot-api');
@@ -12,17 +15,20 @@ const axios = require('axios');
 const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
 const WEBAPP_URL = process.env.WEBAPP_URL || 'https://kabutominer.onrender.com';
 const ADMIN_ID = '1159596878';
-const CHANNEL_URL = 'https://t.me/kabuto_payments';
+const CHANNEL_USERNAME = 'kabuto_payments'; // sin @
+const CHANNEL_URL = `https://t.me/${CHANNEL_USERNAME}`;
 const SUPPORT_URL = 'https://t.me/Kabutominer_support';
+const SUPABASE_URL = process.env.SUPABASE_URL || '';
+const SUPABASE_KEY = process.env.SUPABASE_KEY || '';
 
-// Variables que se exportan
 let bot = null;
 let notifyVIPActivatedFn = async () => {};
 let notifyWithdrawalFn = async () => {};
 let postToChannelFn = async () => {};
+let getChannelStatsFn = async () => ({});
 
 // =====================================================
-// INICIAR BOT (solo si hay token)
+// INICIAR BOT
 // =====================================================
 if (!BOT_TOKEN) {
   console.warn('⚠️ TELEGRAM_BOT_TOKEN no configurado. Bot desactivado.');
@@ -37,30 +43,44 @@ if (!BOT_TOKEN) {
 
   console.log('🤖 Bot de Telegram iniciado correctamente');
   setupBotFeatures();
+  setupDailySummary();
 }
 
 // =====================================================
-// CONFIGURAR TODAS LAS FUNCIONES DEL BOT
+// FUNCIONES AUXILIARES
+// =====================================================
+
+// Formatear fecha relativa
+function timeAgo(date) {
+  const seconds = Math.floor((Date.now() - new Date(date).getTime()) / 1000);
+  if (seconds < 60) return 'hace un momento';
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `hace ${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `hace ${hours} h`;
+  const days = Math.floor(hours / 24);
+  return `hace ${days} d`;
+}
+
+// =====================================================
+// CONFIGURAR COMANDOS DEL BOT
 // =====================================================
 function setupBotFeatures() {
 
   // =====================================================
-  // COMANDO /start (con soporte de referidos)
+  // COMANDO /start
   // =====================================================
   bot.onText(/\/start(.*)/, async (msg, match) => {
     const chatId = msg.chat.id;
     const telegramId = String(msg.from.id);
-    const username = msg.from.username || '';
     const firstName = msg.from.first_name || 'Jugador';
     const referralParam = match[1].trim();
 
     console.log(`👋 /start de ${firstName} (${telegramId}) - ref: ${referralParam}`);
 
-    // Si viene de un enlace de referido (formato: ref_123456789)
     let referrerId = null;
     if (referralParam && referralParam.startsWith('ref_')) {
       referrerId = referralParam.replace('ref_', '');
-      console.log(`🔗 Referido por: ${referrerId}`);
 
       try {
         if (referrerId !== telegramId) {
@@ -77,18 +97,18 @@ function setupBotFeatures() {
     const welcomeText = `🦏 ¡Hola *${firstName}*! Bienvenido a *Kabuto Miner*
 
 ⛏️ *¿Qué es Kabuto Miner?*
-Es un juego de minería ficticia donde minas tokens $KABUTO y puedes retirarlos en criptomonedas reales.
+Juego de minería ficticia donde minas $KABUTO y los retiras en criptomonedas reales.
 
 💎 *Características:*
 • Minado automático en H/s
 • Planes VIP que multiplican tu minado
-• Retiros en USDT, TON, LTC y más
+• Retiros en USDT, TON, LTC, TRX y más
 • Sistema de referidos con comisiones
 • Tareas diarias con recompensas
 
-${referrerId && referrerId !== telegramId ? '🔗 *Entraste por invitación de un amigo. ¡Ambos recibirán bonus!*' : '💡 Usa /help para ver todos los comandos.'}
+${referrerId && referrerId !== telegramId ? '🔗 *Entraste por invitación de un amigo. ¡Ambos recibirán bonus!*' : '💡 Usa /help para ver todos los comandos'}
 
-🚀 Toca el botón *JUGAR* para empezar a minar.`;
+🚀 Toca *JUGAR* para empezar a minar.`;
 
     const keyboard = {
       inline_keyboard: [
@@ -107,11 +127,10 @@ ${referrerId && referrerId !== telegramId ? '🔗 *Entraste por invitación de u
         disable_web_page_preview: true
       });
 
-      // Avisar al referente
       if (referrerId && referrerId !== telegramId) {
         try {
           await bot.sendMessage(referrerId,
-            `🎉 ¡*Nuevo referido*!\n\n✅ *${firstName}* se unió con tu enlace de invitación.\n\n💰 Ganarás comisiones de sus compras y minado.`,
+            `🎉 ¡*Nuevo referido*!\n\n✅ *${firstName}* se unió con tu enlace.\n\n💰 Ganarás comisiones de sus compras y minado.`,
             { parse_mode: 'Markdown' }
           );
         } catch (err) {
@@ -131,13 +150,14 @@ ${referrerId && referrerId !== telegramId ? '🔗 *Entraste por invitación de u
 
     const helpText = `🦏 *Ayuda de Kabuto Miner*
 
-*Comandos disponibles:*
+*Comandos:*
 • /start - Iniciar el juego
 • /help - Ver esta ayuda
 • /play - Abrir Kabuto Miner
 • /referral - Tu enlace de referido
-• /support - Contactar soporte
 • /rules - Reglas del juego
+• /support - Contactar soporte
+• /stats - Estadísticas públicas
 
 *¿Cómo jugar?*
 1️⃣ Toca el botón JUGAR
@@ -152,7 +172,7 @@ ${referrerId && referrerId !== telegramId ? '🔗 *Entraste por invitación de u
 4️⃣ Recibe el pago en tu wallet
 
 *¿Cómo invitar amigos?*
-1️⃣ Usa /referral para obtener tu enlace
+1️⃣ Usa /referral para tu enlace
 2️⃣ Compártelo con amigos
 3️⃣ Gana comisiones de sus compras y minado
 
@@ -184,18 +204,19 @@ ${referrerId && referrerId !== telegramId ? '🔗 *Entraste por invitación de u
   // =====================================================
   bot.onText(/\/play/, async (msg) => {
     const chatId = msg.chat.id;
-    const keyboard = {
-      inline_keyboard: [
-        [{ text: '🦏 ABRIR KABUTO MINER', web_app: { url: WEBAPP_URL } }]
-      ]
-    };
     try {
       await bot.sendMessage(chatId,
-        '🚀 Toca el botón para abrir Kabuto Miner y empezar a minar $KABUTO:',
-        { reply_markup: keyboard }
+        '🚀 Toca para abrir Kabuto Miner y empezar a minar $KABUTO:',
+        {
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: '🦏 ABRIR KABUTO MINER', web_app: { url: WEBAPP_URL } }]
+            ]
+          }
+        }
       );
     } catch (err) {
-      console.error('Error enviando /play:', err.message);
+      console.error('Error /play:', err.message);
     }
   });
 
@@ -205,42 +226,39 @@ ${referrerId && referrerId !== telegramId ? '🔗 *Entraste por invitación de u
   bot.onText(/\/referral/, async (msg) => {
     const chatId = msg.chat.id;
     const telegramId = String(msg.from.id);
-
     const refLink = `https://t.me/Kabutominer_bot?start=ref_${telegramId}`;
 
     const refText = `🎫 *Tu enlace de referido*
 
-Comparte este enlace con tus amigos:
+Comparte este enlace:
 
 🔗 \`${refLink}\`
 
-💎 *Comisiones que ganas:*
+💎 *Comisiones:*
 • 10% de cada compra VIP de tus referidos
 • 5% de todo lo que minen
 
 📋 *Cómo funciona:*
 1️⃣ Comparte tu enlace
 2️⃣ Tu amigo entra y juega
-3️⃣ Tú recibes comisiones automáticamente
-4️⃣ Las comisiones van a tu balance de $KABUTO
+3️⃣ Recibes comisiones automáticamente
+4️⃣ Van a tu balance de $KABUTO
 
-💡 Comparte en redes sociales, grupos de Telegram, o con amigos directamente.`;
-
-    const keyboard = {
-      inline_keyboard: [
-        [{ text: '📤 Compartir enlace', switch_inline_query: refLink }],
-        [{ text: '🦏 JUGAR', web_app: { url: WEBAPP_URL } }]
-      ]
-    };
+💡 Compártelo en redes sociales, grupos, o con amigos.`;
 
     try {
       await bot.sendMessage(chatId, refText, {
         parse_mode: 'Markdown',
-        reply_markup: keyboard,
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: '📤 Compartir', switch_inline_query: refLink }],
+            [{ text: '🦏 JUGAR', web_app: { url: WEBAPP_URL } }]
+          ]
+        },
         disable_web_page_preview: true
       });
     } catch (err) {
-      console.error('Error enviando /referral:', err.message);
+      console.error('Error /referral:', err.message);
     }
   });
 
@@ -253,32 +271,32 @@ Comparte este enlace con tus amigos:
     const rulesText = `📜 *Reglas de Kabuto Miner*
 
 1️⃣ *Una cuenta por persona*
-No puedes tener múltiples cuentas. Si detectamos multicuenta, todas serán baneadas.
+Multicuentas serán baneadas.
 
 2️⃣ *No uses bots o scripts*
-El minado debe ser natural. El uso de herramientas automatizadas resultará en ban.
+El minado debe ser natural.
 
 3️⃣ *Pagos reales*
-Los retiros se procesan en criptomonedas reales via Plisio. Mínimo $1.
+Retiros vía Plisio. Mínimo $1.
 
 4️⃣ *Transparencia*
-Todos los pagos y retiros se publican en @kabuto_payments
+Todos los pagos y retiros se publican en @${CHANNEL_USERNAME}
 
 5️⃣ *Comisiones de referidos*
-10% de compras + 5% de minado de tus referidos.
+10% de compras + 5% de minado.
 
 6️⃣ *Sin spam*
-No hagas spam con tu enlace de referido o serás baneado.
+No hagas spam con tu enlace.
 
 7️⃣ *Responsabilidad*
-Eres responsable de tu dirección de retiro. Verifícala antes de retirar.
+Verifica tu dirección antes de retirar.
 
 💡 *Consejo:* Juega limpio y ganarás más a largo plazo.`;
 
     try {
       await bot.sendMessage(chatId, rulesText, { parse_mode: 'Markdown' });
     } catch (err) {
-      console.error('Error enviando /rules:', err.message);
+      console.error('Error /rules:', err.message);
     }
   });
 
@@ -287,52 +305,84 @@ Eres responsable de tu dirección de retiro. Verifícala antes de retirar.
   // =====================================================
   bot.onText(/\/support/, async (msg) => {
     const chatId = msg.chat.id;
-    const keyboard = {
-      inline_keyboard: [
-        [{ text: '🎫 Abrir ticket de soporte', url: SUPPORT_URL }],
-        [{ text: '📢 Canal de transparencia', url: CHANNEL_URL }]
-      ]
-    };
     try {
       await bot.sendMessage(chatId,
-        '🎫 *Soporte de Kabuto Miner*\n\nSi tienes algún problema, abre un ticket en el grupo de soporte. Respondemos en menos de 24 horas.',
-        { parse_mode: 'Markdown', reply_markup: keyboard }
+        '🎫 *Soporte de Kabuto Miner*\n\nSi tienes algún problema, abre un ticket. Respondemos en menos de 24 horas.',
+        {
+          parse_mode: 'Markdown',
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: '🎫 Abrir ticket', url: SUPPORT_URL }],
+              [{ text: '📢 Canal de transparencia', url: CHANNEL_URL }]
+            ]
+          }
+        }
       );
     } catch (err) {
-      console.error('Error enviando /support:', err.message);
+      console.error('Error /support:', err.message);
     }
   });
 
   // =====================================================
-  // CALLBACK QUERIES (botones inline)
+  // COMANDO /stats (ESTADÍSTICAS PÚBLICAS)
+  // =====================================================
+  bot.onText(/\/stats/, async (msg) => {
+    const chatId = msg.chat.id;
+
+    try {
+      const stats = await getChannelStatsFn();
+
+      const statsText = `📊 *Estadísticas Públicas de Kabuto Miner*
+
+👥 *Usuarios registrados:* ${stats.total_users}
+💰 *Ingresos totales:* $${stats.total_income.toFixed(2)}
+💸 *Retiros procesados:* $${stats.total_withdrawn.toFixed(2)}
+💵 *Liquidez disponible (70%):* $${stats.liquidity.toFixed(2)}
+📈 *Pagos VIP completados:* ${stats.total_purchases}
+🔧 *Hash Power total de la red:* ${stats.total_hash_power.toFixed(0)} H/s
+
+📊 *Transparencia 30/70:*
+• 70% Liquidez para retiros de usuarios
+• 30% Mantenimiento y ganancias admin
+
+🔗 Ver más detalles: ${WEBAPP_URL}/transparency`;
+
+      await bot.sendMessage(chatId, statsText, {
+        parse_mode: 'Markdown',
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: '🦏 JUGAR', web_app: { url: WEBAPP_URL } }],
+            [{ text: '📢 Ver canal', url: CHANNEL_URL }]
+          ]
+        }
+      });
+    } catch (err) {
+      console.error('Error /stats:', err.message);
+    }
+  });
+
+  // =====================================================
+  // CALLBACK QUERIES
   // =====================================================
   bot.on('callback_query', async (query) => {
     const chatId = query.message.chat.id;
     const data = query.data;
 
     if (data === 'help') {
-      // Simular comando /help
       try {
-        const helpText = `🦏 *Ayuda rápida*
-
-Toca *JUGAR* para empezar.
-Comandos útiles:
-• /referral - Tu enlace de referido
-• /rules - Reglas
-• /support - Soporte`;
-
-        const keyboard = {
-          inline_keyboard: [
-            [{ text: '🦏 JUGAR', web_app: { url: WEBAPP_URL } }]
-          ]
-        };
-
-        await bot.sendMessage(chatId, helpText, {
-          parse_mode: 'Markdown',
-          reply_markup: keyboard
-        });
+        await bot.sendMessage(chatId,
+          `🦏 *Ayuda rápida*\n\nToca *JUGAR* para empezar.\nComandos:\n• /referral - Tu enlace\n• /rules - Reglas\n• /stats - Estadísticas\n• /support - Soporte`,
+          {
+            parse_mode: 'Markdown',
+            reply_markup: {
+              inline_keyboard: [
+                [{ text: '🦏 JUGAR', web_app: { url: WEBAPP_URL } }]
+              ]
+            }
+          }
+        );
       } catch (err) {
-        console.error('Error callback help:', err.message);
+        console.error('Error callback:', err.message);
       }
     }
 
@@ -356,7 +406,13 @@ Comandos útiles:
   notifyVIPActivatedFn = async (telegramId, planName, hashPowerGained) => {
     try {
       await bot.sendMessage(telegramId,
-        `🎉 *¡VIP Activado!*\n\n✅ Tu plan *${planName}* ha sido activado correctamente.\n\n💪 Hash Power ganado: *+${hashPowerGained} H/s*\n\n🚀 Ahora minarás mucho más rápido. ¡Ve a jugar!`,
+        `🎉 *¡VIP Activado!*
+
+✅ Tu plan *${planName}* ha sido activado.
+
+💪 Hash Power ganado: *+${hashPowerGained} H/s*
+
+🚀 Ahora minarás mucho más rápido. ¡Ve a jugar!`,
         {
           parse_mode: 'Markdown',
           reply_markup: {
@@ -374,7 +430,14 @@ Comandos útiles:
   notifyWithdrawalFn = async (telegramId, amount, currency, txid) => {
     try {
       await bot.sendMessage(telegramId,
-        `💸 *Retiro procesado*\n\n💰 Monto: *$${amount} ${currency}*\n🔗 TXID: \`${txid}\`\n\n✅ Tu retiro ha sido enviado. Verifica en tu wallet en unos minutos.`,
+        `💸 *Retiro procesado*
+
+💰 Monto: *$${amount} ${currency}*
+🔗 TXID: \`${txid || 'pending'}\`
+
+✅ Tu retiro ha sido enviado. Verifica en tu wallet en unos minutos.
+
+📊 Publicado en @${CHANNEL_USERNAME} para transparencia.`,
         { parse_mode: 'Markdown' }
       );
     } catch (err) {
@@ -382,13 +445,97 @@ Comandos útiles:
     }
   };
 
-  postToChannelFn = async (text) => {
+  // =====================================================
+  // PUBLICAR EN CANAL DE TRANSPARENCIA
+  // =====================================================
+  postToChannelFn = async (text, options = {}) => {
     try {
-      await bot.sendMessage('@kabuto_payments', text, { parse_mode: 'Markdown' });
+      await bot.sendMessage(`@${CHANNEL_USERNAME}`, text, {
+        parse_mode: 'Markdown',
+        disable_web_page_preview: true,
+        ...options
+      });
+      return true;
     } catch (err) {
       console.log('No se pudo publicar en canal:', err.message);
+      return false;
     }
   };
+
+  // =====================================================
+  // OBTENER ESTADÍSTICAS PÚBLICAS
+  // =====================================================
+  getChannelStatsFn = async () => {
+    try {
+      const response = await axios.get(`${WEBAPP_URL}/api/public_stats`);
+      return response.data;
+    } catch (err) {
+      console.log('Error obteniendo stats:', err.message);
+      return {
+        total_users: 0,
+        total_income: 0,
+        total_withdrawn: 0,
+        liquidity: 0,
+        total_purchases: 0,
+        total_hash_power: 0
+      };
+    }
+  };
+}
+
+// =====================================================
+// RESUMEN DIARIO AUTOMÁTICO (cada 24h)
+// =====================================================
+function setupDailySummary() {
+  if (!bot) return;
+
+  // Calcular próximo mediodía UTC
+  function getNextNoon() {
+    const now = new Date();
+    const tomorrow = new Date(now);
+    tomorrow.setUTCDate(now.getUTCDate() + 1);
+    tomorrow.setUTCHours(12, 0, 0, 0);
+    return tomorrow;
+  }
+
+  async function sendDailySummary() {
+    try {
+      const stats = await getChannelStatsFn();
+
+      const today = new Date().toLocaleDateString('es-ES', {
+        weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
+      });
+
+      const summary = `📊 *Resumen diario - ${today}*
+
+👥 Usuarios totales: *${stats.total_users}*
+💰 Ingresos acumulados: *$${stats.total_income.toFixed(2)}*
+💸 Retiros procesados: *$${stats.total_withdrawn.toFixed(2)}*
+💵 Liquidez disponible: *$${stats.liquidity.toFixed(2)}*
+📦 Compras VIP: *${stats.total_purchases}*
+⚡ Hash Power total: *${stats.total_hash_power.toFixed(0)} H/s*
+
+📊 *Split 30/70:*
+• 70% para retiros de usuarios
+• 30% mantenimiento y admin
+
+🦏 ¡Gracias por confiar en Kabuto Miner!`;
+
+      await postToChannelFn(summary);
+      console.log('📊 Resumen diario publicado');
+
+      // Programar el siguiente
+      const msUntilNext = getNextNoon() - new Date();
+      setTimeout(sendDailySummary, msUntilNext);
+    } catch (err) {
+      console.error('Error en resumen diario:', err.message);
+    }
+  }
+
+  // Programar primer resumen
+  const msUntilNext = getNextNoon() - new Date();
+  setTimeout(sendDailySummary, msUntilNext);
+  console.log(`📊 Próximo resumen diario en ${Math.floor(msUntilNext / 3600000)} horas`);
 }
 
 // =====================================================
@@ -398,5 +545,6 @@ module.exports = {
   bot,
   notifyVIPActivated: notifyVIPActivatedFn,
   notifyWithdrawal: notifyWithdrawalFn,
-  postToChannel: postToChannelFn
+  postToChannel: postToChannelFn,
+  getChannelStats: getChannelStatsFn
 };
