@@ -1,7 +1,7 @@
 // =====================================================
-// KABUTO MINER v2.1 - SERVIDOR CON SUPABASE + WEBHOOK PLISIO
+// KABUTO MINER v2.2 - SERVIDOR + BOT DE TELEGRAM
 // =====================================================
-// Reemplaza backend/server.js con este archivo
+// Integra: Express + Supabase + Plisio Webhook + Bot de Telegram
 // =====================================================
 
 const express = require('express');
@@ -10,6 +10,9 @@ const cors = require('cors');
 const axios = require('axios');
 const { createClient } = require('@supabase/supabase-js');
 const path = require('path');
+
+// Importar el bot de Telegram (se inicializa solo si hay token)
+const { notifyVIPActivated, notifyWithdrawal, postToChannel } = require('./bot');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -39,8 +42,6 @@ const SUPPORTED_CURRENCIES = ['USDT', 'TON', 'LTC', 'TRX', 'DOGE', 'BNB', 'SOL',
 // MIDDLEWARE
 // =====================================================
 app.use(cors());
-
-// Webhook Plisio necesita body crudo para verificar firma
 app.use('/api/plisio_webhook', express.raw({ type: '*/*' }));
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '../kabuto-game/dist')));
@@ -92,7 +93,7 @@ async function getOrCreateUser(telegramId, username = '', firstName = '') {
 }
 
 // =====================================================
-// FUNCIÓN: Activar VIP (centralizada)
+// FUNCIÓN: Activar VIP (notifica al bot)
 // =====================================================
 async function activateVIP(telegramId, planName, invoiceId) {
   try {
@@ -134,6 +135,14 @@ async function activateVIP(telegramId, planName, invoiceId) {
         .eq('telegram_id', telegramId);
 
       console.log(`✅ VIP activado: ${telegramId} → ${planName} (HP: ${newHashPower})`);
+
+      // 🆕 Notificar al usuario via Telegram
+      await notifyVIPActivated(telegramId, planName, plan.hash_power);
+
+      // 🆕 Publicar en canal de transparencia
+      await postToChannel(
+        `🦏 *Nueva compra VIP*\n\n👤 Usuario: ${user.username || user.first_name}\n📦 Plan: *${planName}*\n💰 Monto: *$${plan.price}*\n⚡ Hash Power: +${plan.hash_power} H/s`
+      );
     }
 
     await supabase
@@ -296,7 +305,7 @@ app.post('/api/create_invoice', async (req, res) => {
 });
 
 // =====================================================
-// API: VERIFICAR ESTADO DE FACTURA (frontend cada 5s)
+// API: VERIFICAR ESTADO DE FACTURA
 // =====================================================
 app.get('/api/check_invoice/:tx_id', async (req, res) => {
   try {
@@ -312,7 +321,6 @@ app.get('/api/check_invoice/:tx_id', async (req, res) => {
     const op = response.data.data;
     const status = op.status;
 
-    // Si está completada, activar VIP (fallback del webhook)
     if (status === 'completed' || status === 'confirmed') {
       const { data: purchase } = await supabase
         .from('purchases')
@@ -338,7 +346,7 @@ app.get('/api/check_invoice/:tx_id', async (req, res) => {
 });
 
 // =====================================================
-// WEBHOOK PLISIO (con verificación de firma opcional)
+// WEBHOOK PLISIO
 // =====================================================
 app.post('/api/plisio_webhook', async (req, res) => {
   try {
@@ -357,7 +365,6 @@ app.post('/api/plisio_webhook', async (req, res) => {
 
     console.log('📦 Datos:', JSON.stringify(body, null, 2));
 
-    // Verificación de firma (opcional, si configuraste PLISIO_SECRET_KEY)
     if (PLISIO_SECRET_KEY && body.verify_hash) {
       const verifyHash = body.verify_hash;
       delete body.verify_hash;
@@ -486,7 +493,7 @@ app.post('/api/register_referral', async (req, res) => {
 });
 
 // =====================================================
-// API: SOLICITAR RETIRO
+// API: SOLICITAR RETIRO (con notificación al bot)
 // =====================================================
 app.post('/api/withdraw', async (req, res) => {
   try {
@@ -518,6 +525,8 @@ app.post('/api/withdraw', async (req, res) => {
       return res.status(400).json({ error: response.data.message || 'Error retiro' });
     }
 
+    const txid = response.data.data.tx_id || '';
+
     await supabase
       .from('users')
       .update({ balance: user.balance - amount })
@@ -529,12 +538,20 @@ app.post('/api/withdraw', async (req, res) => {
       currency: currency,
       address: address,
       status: 'completed',
-      txid: response.data.data.tx_id || ''
+      txid: txid
     }]);
+
+    // 🆕 Notificar al usuario
+    await notifyWithdrawal(telegram_id, amount, currency, txid);
+
+    // 🆕 Publicar en canal de transparencia
+    await postToChannel(
+      `💸 *Retiro procesado*\n\n👤 Usuario: ${user.username || user.first_name}\n💰 Monto: *$${amount} ${currency}*\n🔗 TXID: \`${txid || 'pending'}\``
+    );
 
     res.json({
       success: true,
-      tx_id: response.data.data.tx_id,
+      tx_id: txid,
       new_balance: user.balance - amount
     });
   } catch (err) {
@@ -605,7 +622,7 @@ app.post('/api/admin/ban', async (req, res) => {
 });
 
 // =====================================================
-// API: ACTIVAR VIP MANUAL (admin fallback)
+// API: ACTIVAR VIP MANUAL (admin)
 // =====================================================
 app.post('/api/admin/activate_vip', async (req, res) => {
   try {
@@ -644,6 +661,9 @@ app.post('/api/admin/activate_vip', async (req, res) => {
       plisio_invoice_id: `manual_${Date.now()}`,
       status: 'completed'
     }]);
+
+    // Notificar al usuario
+    await notifyVIPActivated(telegram_id, plan.name, plan.hash_power);
 
     res.json({
       success: true,
@@ -685,7 +705,8 @@ app.use((req, res) => {
 // INICIAR
 // =====================================================
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🦏 Kabuto Miner v2.1 corriendo en puerto ${PORT}`);
+  console.log(`🦏 Kabuto Miner v2.2 corriendo en puerto ${PORT}`);
   console.log(`📊 Base de datos: Supabase`);
   console.log(`🔔 Webhook Plisio: https://kabutominer.onrender.com/api/plisio_webhook`);
+  console.log(`🤖 Bot de Telegram: activo`);
 });

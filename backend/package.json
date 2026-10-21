@@ -1,7 +1,7 @@
 {
   "name": "kabuto-miner-backend",
-  "version": "2.0.0",
-  "description": "Backend de Kabuto Miner con Supabase",
+  "version": "2.2.0",
+  "description": "Backend de Kabuto Miner con Supabase + Bot de Telegram",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
@@ -10,7 +10,8 @@
     "@supabase/supabase-js": "^2.45.0",
     "axios": "^1.7.0",
     "cors": "^2.8.5",
-    "express": "^4.19.0"
+    "express": "^4.19.0",
+    "node-telegram-bot-api": "^0.66.0"
   },
   "engines": {
     "node": ">=18.0.0"
