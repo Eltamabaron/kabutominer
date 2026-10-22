@@ -1,5 +1,10 @@
 // =====================================================
-// KABUTO MINER v2.3 - SERVIDOR + BOT + CANAL DE TRANSPARENCIA
+// KABUTO MINER v2.5 - SERVER.JS ACTUALIZADO
+// =====================================================
+// CAMBIOS:
+// - Agregado endpoint /api/admin/remove_vip para quitar VIP
+// - Mejorado /api/admin/activate_vip con respuesta completa
+// - Mejor manejo de errores en create_invoice
 // =====================================================
 
 const express = require('express');
@@ -40,7 +45,7 @@ const SUPPORTED_CURRENCIES = ['USDT', 'TON', 'LTC', 'TRX', 'DOGE', 'BNB', 'SOL',
 // =====================================================
 app.use(cors());
 app.use('/api/plisio_webhook', express.raw({ type: '*/*' }));
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, '../kabuto-game/dist')));
 
 // =====================================================
@@ -73,7 +78,7 @@ async function getOrCreateUser(telegramId, username = '', firstName = '') {
         username: username,
         first_name: firstName,
         balance: 0,
-        hash_power: 1,
+        hash_power: 10, // 🚀 FIX: Empezar con 10 H/s
         vip_level: 0,
         total_mined: 0,
         banned: 0
@@ -90,7 +95,7 @@ async function getOrCreateUser(telegramId, username = '', firstName = '') {
 }
 
 // =====================================================
-// FUNCIÓN: Activar VIP (con notificaciones)
+// FUNCIÓN: Activar VIP (centralizada)
 // =====================================================
 async function activateVIP(telegramId, planName, invoiceId) {
   try {
@@ -134,26 +139,17 @@ async function activateVIP(telegramId, planName, invoiceId) {
       console.log(`✅ VIP activado: ${telegramId} → ${planName} (HP: ${newHashPower})`);
 
       // Notificar al usuario via Telegram
-      await notifyVIPActivated(telegramId, planName, plan.hash_power);
+      if (notifyVIPActivated) {
+        await notifyVIPActivated(telegramId, planName, plan.hash_power);
+      }
 
-      // 📢 Publicar en canal de transparencia (sin exponer telegram_id)
-      const maskedName = user.username
-        ? `@${user.username}`
-        : (user.first_name || 'Anónimo');
-
-      await postToChannel(
-        `🦏 *Nueva compra VIP confirmada*
-
-📦 Plan: *${planName}*
-💰 Monto: *$${plan.price} USD*
-💱 Moneda: ${purchase.currency}
-⚡ Hash Power añadido: *+${plan.hash_power} H/s*
-👤 Usuario: ${maskedName}
-🕐 Hora: ${new Date().toUTCString()}
-
-✅ Pago verificado vía Plisio
-📊 Reserva de liquidez: 70% / 30%`
-      );
+      // Publicar en canal de transparencia
+      if (postToChannel) {
+        const maskedName = user.username ? `@${user.username}` : (user.first_name || 'Anónimo');
+        await postToChannel(
+          `🦏 *Nueva compra VIP confirmada*\n\n📦 Plan: *${planName}*\n💰 Monto: *$${plan.price} USD*\n💱 Moneda: ${purchase.currency}\n⚡ Hash Power añadido: *+${plan.hash_power} H/s*\n👤 Usuario: ${maskedName}\n🕐 Hora: ${new Date().toUTCString()}\n\n✅ Pago verificado vía Plisio`
+        );
+      }
     }
 
     await supabase
@@ -255,25 +251,42 @@ app.get('/api/state/:telegram_id', async (req, res) => {
 });
 
 // =====================================================
-// API: CREAR FACTURA PLISIO
+// API: CREAR FACTURA PLISIO - MEJORADA
 // =====================================================
 app.post('/api/create_invoice', async (req, res) => {
   try {
+    console.log('🛒 create_invoice - Body recibido:', req.body);
+
     const { telegram_id, plan_id, currency } = req.body;
+
+    // Validaciones
+    if (!telegram_id) {
+      console.error('❌ telegram_id faltante');
+      return res.status(400).json({ error: 'telegram_id requerido' });
+    }
+
     const plan = VIP_PLANS[plan_id];
-    if (!plan) return res.status(400).json({ error: 'Plan inválido' });
+    if (!plan) {
+      console.error('❌ Plan inválido:', plan_id);
+      return res.status(400).json({ error: 'Plan inválido' });
+    }
 
     const payCurrency = currency || 'USDT';
     if (!SUPPORTED_CURRENCIES.includes(payCurrency)) {
+      console.error('❌ Moneda no soportada:', payCurrency);
       return res.status(400).json({ error: 'Moneda no soportada' });
     }
 
     const user = await getOrCreateUser(telegram_id);
-    if (!user) return res.status(400).json({ error: 'Usuario inválido' });
+    if (!user) {
+      console.error('❌ Usuario inválido:', telegram_id);
+      return res.status(400).json({ error: 'Usuario inválido' });
+    }
 
     const orderNumber = `${telegram_id}_${plan_id}_${Date.now()}`;
+    console.log('🛒 Creando factura en Plisio:', { plan: plan.name, currency: payCurrency, amount: plan.price });
 
-    const response = await axios.post('https://plisio.net/api/v1/invoices/new', {
+    const plisioResponse = await axios.post('https://plisio.net/api/v1/invoices/new', {
       source_currency: 'USD',
       source_amount: plan.price,
       currency: payCurrency,
@@ -283,16 +296,23 @@ app.post('/api/create_invoice', async (req, res) => {
       success_callback_url: 'https://kabutominer.onrender.com/success',
       fail_callback_url: 'https://kabutominer.onrender.com/fail',
     }, {
-      params: { api_key: PLISIO_API_KEY }
+      params: { api_key: PLISIO_API_KEY },
+      timeout: 30000
     });
 
-    if (response.data.status !== 'success') {
-      return res.status(400).json({ error: response.data.message || 'Error Plisio' });
+    console.log('🛒 Respuesta Plisio:', plisioResponse.data.status, plisioResponse.data.message || '');
+
+    if (plisioResponse.data.status !== 'success') {
+      console.error('❌ Plisio error:', plisioResponse.data);
+      return res.status(400).json({
+        error: plisioResponse.data.message || 'Error al crear factura en Plisio'
+      });
     }
 
-    const invoiceId = response.data.data.tx_id || response.data.data.id;
+    const invoiceId = plisioResponse.data.data.tx_id || plisioResponse.data.data.id;
 
-    await supabase.from('purchases').insert([{
+    // Guardar compra pendiente en BD
+    const { error: insertError } = await supabase.from('purchases').insert([{
       telegram_id: telegram_id,
       plan: plan.name,
       amount_usd: plan.price,
@@ -301,17 +321,25 @@ app.post('/api/create_invoice', async (req, res) => {
       status: 'pending'
     }]);
 
+    if (insertError) {
+      console.error('⚠️ Error guardando compra (no crítico):', insertError);
+    }
+
+    console.log('✅ Factura creada:', invoiceId);
+
     res.json({
-      invoice_url: response.data.data.invoice_url,
+      invoice_url: plisioResponse.data.data.invoice_url,
       tx_id: invoiceId,
       order_number: orderNumber,
-      amount: response.data.data.amount,
+      amount: plisioResponse.data.data.amount,
       currency: payCurrency,
       plan: plan
     });
   } catch (err) {
-    console.error('Error create_invoice:', err.response?.data || err.message);
-    res.status(500).json({ error: 'Error al crear factura' });
+    console.error('❌ Error create_invoice:', err.response?.data || err.message);
+    res.status(500).json({
+      error: 'Error al crear factura: ' + (err.message || 'desconocido')
+    });
   }
 });
 
@@ -322,7 +350,7 @@ app.get('/api/check_invoice/:tx_id', async (req, res) => {
   try {
     const response = await axios.get(
       `https://plisio.net/api/v1/operations/${req.params.tx_id}`,
-      { params: { api_key: PLISIO_API_KEY } }
+      { params: { api_key: PLISIO_API_KEY }, timeout: 15000 }
     );
 
     if (response.data.status !== 'success') {
@@ -443,13 +471,16 @@ app.post('/api/complete_task', async (req, res) => {
       .single();
 
     if (user) {
+      const newBalance = user.balance + reward;
       await supabase
         .from('users')
-        .update({ balance: user.balance + reward })
+        .update({ balance: newBalance })
         .eq('telegram_id', telegram_id);
-    }
 
-    res.json({ success: true, new_balance: user.balance + reward });
+      res.json({ success: true, new_balance: newBalance });
+    } else {
+      res.json({ success: false, message: 'Usuario no encontrado' });
+    }
   } catch (err) {
     console.error('Error complete_task:', err);
     res.status(500).json({ error: 'Error al completar tarea' });
@@ -504,7 +535,7 @@ app.post('/api/register_referral', async (req, res) => {
 });
 
 // =====================================================
-// API: SOLICITAR RETIRO (con publicación en canal)
+// API: SOLICITAR RETIRO
 // =====================================================
 app.post('/api/withdraw', async (req, res) => {
   try {
@@ -529,7 +560,8 @@ app.post('/api/withdraw', async (req, res) => {
       amount: amount,
       to: address
     }, {
-      params: { api_key: PLISIO_API_KEY }
+      params: { api_key: PLISIO_API_KEY },
+      timeout: 30000
     });
 
     if (response.data.status !== 'success') {
@@ -552,27 +584,20 @@ app.post('/api/withdraw', async (req, res) => {
       txid: txid
     }]);
 
-    // Notificar al usuario
-    await notifyWithdrawal(telegram_id, amount, currency, txid);
+    if (notifyWithdrawal) {
+      await notifyWithdrawal(telegram_id, amount, currency, txid);
+    }
 
-    // 📢 Publicar en canal de transparencia
-    const maskedName = user.username ? `@${user.username}` : (user.first_name || 'Anónimo');
-    const maskedAddress = address.length > 12
-      ? `${address.substring(0, 8)}...${address.substring(address.length - 6)}`
-      : address;
+    if (postToChannel) {
+      const maskedName = user.username ? `@${user.username}` : (user.first_name || 'Anónimo');
+      const maskedAddress = address.length > 12
+        ? `${address.substring(0, 8)}...${address.substring(address.length - 6)}`
+        : address;
 
-    await postToChannel(
-      `💸 *Retiro procesado*
-
-👤 Usuario: ${maskedName}
-💰 Monto: *$${amount} ${currency}*
-📍 Dirección: \`${maskedAddress}\`
-🔗 TXID: \`${txid || 'pending'}\`
-🕐 Hora: ${new Date().toUTCString()}
-
-✅ Enviado vía Plisio
-📊 Saldo restante en reservas: 70%`
-    );
+      await postToChannel(
+        `💸 *Retiro procesado*\n\n👤 Usuario: ${maskedName}\n💰 Monto: *$${amount} ${currency}*\n📍 Dirección: \`${maskedAddress}\`\n🔗 TXID: \`${txid || 'pending'}\`\n🕐 Hora: ${new Date().toUTCString()}`
+      );
+    }
 
     res.json({
       success: true,
@@ -581,12 +606,14 @@ app.post('/api/withdraw', async (req, res) => {
     });
   } catch (err) {
     console.error('Error withdraw:', err.response?.data || err.message);
-    res.status(500).json({ error: 'Error al procesar retiro' });
+    res.status(500).json({
+      error: 'Error al procesar retiro: ' + (err.response?.data?.message || err.message)
+    });
   }
 });
 
 // =====================================================
-// API: ESTADÍSTICAS PÚBLICAS (sin exponer datos sensibles)
+// API: ESTADÍSTICAS PÚBLICAS
 // =====================================================
 app.get('/api/public_stats', async (req, res) => {
   try {
@@ -667,19 +694,27 @@ app.post('/api/admin/ban', async (req, res) => {
       return res.status(403).json({ error: 'No autorizado' });
     }
 
+    const { data: user } = await supabase
+      .from('users')
+      .select('banned')
+      .eq('telegram_id', telegram_id)
+      .single();
+
+    const newBannedStatus = user?.banned ? 0 : 1;
+
     await supabase
       .from('users')
-      .update({ banned: 1 })
+      .update({ banned: newBannedStatus })
       .eq('telegram_id', telegram_id);
 
-    res.json({ success: true });
+    res.json({ success: true, banned: newBannedStatus });
   } catch (err) {
     res.status(500).json({ error: 'Error al banear' });
   }
 });
 
 // =====================================================
-// API: ACTIVAR VIP MANUAL (admin)
+// API: ACTIVAR VIP MANUAL - MEJORADA
 // =====================================================
 app.post('/api/admin/activate_vip', async (req, res) => {
   try {
@@ -702,13 +737,15 @@ app.post('/api/admin/activate_vip', async (req, res) => {
     const newHashPower = user.hash_power + plan.hash_power;
     const newVipLevel = Math.max(user.vip_level, parseInt(plan_id));
 
-    await supabase
+    const { error: updateError } = await supabase
       .from('users')
       .update({
         hash_power: newHashPower,
         vip_level: newVipLevel
       })
       .eq('telegram_id', telegram_id);
+
+    if (updateError) throw updateError;
 
     await supabase.from('purchases').insert([{
       telegram_id: telegram_id,
@@ -719,16 +756,74 @@ app.post('/api/admin/activate_vip', async (req, res) => {
       status: 'completed'
     }]);
 
-    await notifyVIPActivated(telegram_id, plan.name, plan.hash_power);
+    if (notifyVIPActivated) {
+      await notifyVIPActivated(telegram_id, plan.name, plan.hash_power);
+    }
+
+    console.log(`✅ VIP manual activado: ${telegram_id} → ${plan.name} (HP: ${newHashPower})`);
 
     res.json({
       success: true,
       new_hash_power: newHashPower,
-      new_vip_level: newVipLevel
+      new_vip_level: newVipLevel,
+      message: `VIP ${plan_id} activado correctamente`
     });
   } catch (err) {
     console.error('Error activate_vip manual:', err);
-    res.status(500).json({ error: 'Error' });
+    res.status(500).json({ error: 'Error: ' + err.message });
+  }
+});
+
+// =====================================================
+// 🆕 API: REMOVER VIP MANUAL
+// =====================================================
+app.post('/api/admin/remove_vip', async (req, res) => {
+  try {
+    const { admin_id, telegram_id } = req.body;
+    if (admin_id !== ADMIN_TELEGRAM_ID) {
+      return res.status(403).json({ error: 'No autorizado' });
+    }
+
+    const { data: user } = await supabase
+      .from('users')
+      .select('*')
+      .eq('telegram_id', telegram_id)
+      .single();
+
+    if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
+
+    // Resetear VIP: hash_power a 10 (base), vip_level a 0
+    const { error: updateError } = await supabase
+      .from('users')
+      .update({
+        hash_power: 10,
+        vip_level: 0
+      })
+      .eq('telegram_id', telegram_id);
+
+    if (updateError) throw updateError;
+
+    // Registrar en purchases como removido (para histórico)
+    await supabase.from('purchases').insert([{
+      telegram_id: telegram_id,
+      plan: 'REMOVED',
+      amount_usd: 0,
+      currency: 'MANUAL',
+      plisio_invoice_id: `removed_${Date.now()}`,
+      status: 'removed'
+    }]);
+
+    console.log(`✅ VIP removido: ${telegram_id} (HP reseteado a 10)`);
+
+    res.json({
+      success: true,
+      new_hash_power: 10,
+      new_vip_level: 0,
+      message: 'VIP removido correctamente'
+    });
+  } catch (err) {
+    console.error('Error remove_vip:', err);
+    res.status(500).json({ error: 'Error: ' + err.message });
   }
 });
 
@@ -750,7 +845,7 @@ app.get('/fail', (req, res) => {
 });
 
 // =====================================================
-// PÁGINA DE TRANSPARENCIA PÚBLICA
+// PÁGINA DE TRANSPARENCIA
 // =====================================================
 app.get('/transparency', (req, res) => {
   res.send(`<!DOCTYPE html>
@@ -761,146 +856,52 @@ app.get('/transparency', (req, res) => {
 <title>Kabuto Miner - Transparencia</title>
 <style>
 * { margin:0; padding:0; box-sizing:border-box; }
-body {
-  background:#0d1117;
-  color:#fff;
-  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif;
-  min-height:100vh;
-  padding:20px;
-}
+body { background:#0d1117; color:#fff; font-family:Arial; padding:20px; }
 .container { max-width:800px; margin:0 auto; }
 header { text-align:center; margin-bottom:30px; }
 .logo { font-size:48px; }
-h1 { font-size:28px; margin-top:10px; color:#3fb950; }
-.subtitle { color:#8b949e; margin-top:5px; }
-.stats-grid {
-  display:grid;
-  grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
-  gap:15px;
-  margin:20px 0;
-}
-.stat-card {
-  background:#161b22;
-  border:1px solid #30363d;
-  border-radius:10px;
-  padding:20px;
-  text-align:center;
-}
-.stat-card .icon { font-size:32px; }
-.stat-card .value { font-size:24px; font-weight:bold; margin:8px 0; color:#3fb950; }
+h1 { color:#3fb950; }
+.stats-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:15px; margin:20px 0; }
+.stat-card { background:#161b22; border:1px solid #30363d; border-radius:10px; padding:20px; text-align:center; }
+.stat-card .value { font-size:24px; font-weight:bold; color:#3fb950; margin:8px 0; }
 .stat-card .label { color:#8b949e; font-size:14px; }
-.split-section {
-  background:#161b22;
-  border:1px solid #30363d;
-  border-radius:10px;
-  padding:20px;
-  margin:20px 0;
-}
-.split-bar {
-  display:flex;
-  height:30px;
-  border-radius:5px;
-  overflow:hidden;
-  margin-top:10px;
-}
+.split-bar { display:flex; height:30px; border-radius:5px; overflow:hidden; margin-top:10px; }
 .split-70 { background:#3fb950; width:70%; display:flex; align-items:center; justify-content:center; font-weight:bold; }
 .split-30 { background:#f78166; width:30%; display:flex; align-items:center; justify-content:center; font-weight:bold; }
-.section-title { font-size:18px; margin:20px 0 10px; }
-.channel-link {
-  display:inline-block;
-  background:#238636;
-  color:#fff;
-  padding:12px 24px;
-  border-radius:6px;
-  text-decoration:none;
-  margin-top:15px;
-  font-weight:bold;
-}
-.refresh-info { text-align:center; color:#8b949e; font-size:12px; margin-top:20px; }
 </style>
 </head>
 <body>
 <div class="container">
   <header>
     <div class="logo">🦏</div>
-    <h1>Kabuto Miner - Panel de Transparencia</h1>
-    <p class="subtitle">Estadísticas financieras en tiempo real</p>
+    <h1>Kabuto Miner - Transparencia</h1>
   </header>
-
-  <div class="stats-grid" id="stats">
-    <div class="stat-card">
-      <div class="icon">👥</div>
-      <div class="value" id="total_users">-</div>
-      <div class="label">Usuarios</div>
-    </div>
-    <div class="stat-card">
-      <div class="icon">💰</div>
-      <div class="value" id="total_income">-</div>
-      <div class="label">Ingresos totales</div>
-    </div>
-    <div class="stat-card">
-      <div class="icon">💸</div>
-      <div class="value" id="total_withdrawn">-</div>
-      <div class="label">Retiros pagados</div>
-    </div>
-    <div class="stat-card">
-      <div class="icon">📦</div>
-      <div class="value" id="total_purchases">-</div>
-      <div class="label">Compras VIP</div>
-    </div>
-    <div class="stat-card">
-      <div class="icon">⚡</div>
-      <div class="value" id="total_hash_power">-</div>
-      <div class="label">Hash Power total</div>
-    </div>
-    <div class="stat-card">
-      <div class="icon">💵</div>
-      <div class="value" id="liquidity">-</div>
-      <div class="label">Liquidez disponible</div>
-    </div>
-  </div>
-
-  <div class="split-section">
-    <h3 class="section-title">📊 Distribución financiera (Split 30/70)</h3>
-    <p style="color:#8b949e;margin-bottom:10px">De todos los ingresos, 70% se reserva para pagar retiros de usuarios, 30% para mantenimiento y ganancia del admin.</p>
+  <div class="stats-grid" id="stats"></div>
+  <div style="background:#161b22;border:1px solid #30363d;border-radius:10px;padding:20px;margin:20px 0">
+    <h3>Distribución 30/70</h3>
     <div class="split-bar">
       <div class="split-70">70% Retiros</div>
       <div class="split-30">30% Admin</div>
     </div>
-    <div style="display:flex;justify-content:space-between;margin-top:10px">
-      <div><strong style="color:#3fb950">$<span id="liquidity_70">0</span></strong> reservado</div>
-      <div><strong style="color:#f78166">$<span id="admin_profit_30">0</span></strong> admin</div>
-    </div>
   </div>
-
   <div style="text-align:center;margin-top:30px">
-    <p style="color:#8b949e">📢 Cada pago y retiro se publica automáticamente en nuestro canal de Telegram</p>
-    <a href="https://t.me/kabuto_payments" class="channel-link">Ver canal @kabuto_payments</a>
-  </div>
-
-  <div class="refresh-info">
-    Última actualización: <span id="last_update">-</span><br>
-    Se actualiza automáticamente cada 30 segundos
+    <a href="https://t.me/kabuto_payments" style="background:#238636;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:bold">Ver canal @kabuto_payments</a>
   </div>
 </div>
-
 <script>
 async function loadStats() {
   try {
     const r = await fetch('/api/public_stats');
     const d = await r.json();
-    document.getElementById('total_users').textContent = d.total_users;
-    document.getElementById('total_income').textContent = '$' + d.total_income.toFixed(2);
-    document.getElementById('total_withdrawn').textContent = '$' + d.total_withdrawn.toFixed(2);
-    document.getElementById('total_purchases').textContent = d.total_purchases;
-    document.getElementById('total_hash_power').textContent = d.total_hash_power.toFixed(0) + ' H/s';
-    document.getElementById('liquidity').textContent = '$' + d.liquidity.toFixed(2);
-    document.getElementById('liquidity_70').textContent = d.liquidity.toFixed(2);
-    document.getElementById('admin_profit_30').textContent = d.admin_profit.toFixed(2);
-    document.getElementById('last_update').textContent = new Date(d.last_update).toLocaleString('es-ES');
-  } catch (e) {
-    console.error('Error:', e);
-  }
+    document.getElementById('stats').innerHTML = [
+      ['👥','Usuarios', d.total_users],
+      ['💰','Ingresos', '$'+d.total_income.toFixed(2)],
+      ['💸','Retiros', '$'+d.total_withdrawn.toFixed(2)],
+      ['📦','Compras VIP', d.total_purchases],
+      ['⚡','Hash Power', d.total_hash_power.toFixed(0)+' H/s'],
+      ['💵','Liquidez', '$'+d.liquidity.toFixed(2)]
+    ].map(([i,l,v]) => '<div class="stat-card"><div style="font-size:32px">'+i+'</div><div class="value">'+v+'</div><div class="label">'+l+'</div></div>').join('');
+  } catch(e) { console.error(e); }
 }
 loadStats();
 setInterval(loadStats, 30000);
@@ -920,10 +921,9 @@ app.use((req, res) => {
 // INICIAR
 // =====================================================
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🦏 Kabuto Miner v2.3 corriendo en puerto ${PORT}`);
+  console.log(`🦏 Kabuto Miner v2.5 corriendo en puerto ${PORT}`);
   console.log(`📊 Base de datos: Supabase`);
-  console.log(`🔔 Webhook Plisio: https://kabutominer.onrender.com/api/plisio_webhook`);
-  console.log(`🤖 Bot de Telegram: activo`);
-  console.log(`📢 Canal de transparencia: @kabuto_payments`);
-  console.log(`🌐 Panel público: https://kabutominer.onrender.com/transparency`);
+  console.log(`🔔 Webhook: https://kabutominer.onrender.com/api/plisio_webhook`);
+  console.log(`🤖 Bot: activo`);
+  console.log(`📢 Canal: @kabuto_payments`);
 });

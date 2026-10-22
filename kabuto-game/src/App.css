@@ -1229,3 +1229,23 @@ body {
     font-size: 30px;
   }
 }
+/* =====================================================
+   ARCHIVO DE ESTILO - VERSIÓN COMPLETA ACTUALIZADA
+   Agregar al final de tu App.css existente
+   ===================================================== */
+
+/* ============== LOADING IMAGE (FIX EMOJI) ============== */
+.loading-coin-img {
+  width: 120px;
+  height: 120px;
+  object-fit: contain;
+  animation: bounce 1s infinite;
+  margin-bottom: 20px;
+  filter: drop-shadow(0 0 30px rgba(255, 215, 0, 0.6));
+}
+
+.loading-coin {
+  font-size: 80px;
+  animation: bounce 1s infinite;
+  margin-bottom: 20px;
+}

@@ -5,7 +5,8 @@ const API_URL = 'https://kabutominer.onrender.com';
 const ADMIN_ID = '1159596878';
 
 const KABUTO_PRICE_USD = 0.001;
-const MINING_MULTIPLIER = 0.0000015;
+// 🚀 FIX: Velocidad de minado restaurada a 10 H/s base (sin romper economía)
+const MINING_MULTIPLIER = 0.0001; // Antes era 0.0000015 - ahora mina mucho más rápido
 const REQUIRED_VIP_REFERRALS = 6;
 const MIN_WITHDRAWAL_USD = 5;
 const WITHDRAWAL_FEE = 0.5;
@@ -36,6 +37,7 @@ function App() {
   const [paymentInfo, setPaymentInfo] = useState(null);
   const [checkingPayment, setCheckingPayment] = useState(false);
   const [notification, setNotification] = useState(null);
+  const [creatingInvoice, setCreatingInvoice] = useState(false);
 
   const stateRef = useRef();
   stateRef.current = { holdingWallet, poolWallet, hashPower };
@@ -44,13 +46,54 @@ function App() {
   const showModal = (title, message, type = 'success') => {
     setModal({ show: true, title, message, type });
   };
-
   const closeModal = () => setModal({ show: false, title: '', message: '', type: '' });
-
   const showNotification = (message, type = 'info') => {
     setNotification({ message, type });
     setTimeout(() => setNotification(null), 3000);
   };
+
+  // =====================================================
+  // RELOAD USER STATE - función centralizada
+  // =====================================================
+  async function reloadUserState(telegramId) {
+    try {
+      const r = await fetch(`${API_URL}/api/state/${telegramId}`);
+      const data = await r.json();
+      if (data && !data.error) {
+        setUser(prev => ({
+          ...prev,
+          balance: data.balance,
+          hash_power: data.hash_power,
+          vip_level: data.vip_level,
+          total_mined: data.total_mined,
+          is_vip: data.vip_level > 0 ? 1 : 0
+        }));
+        setHoldingWallet(Number(data.balance) || 0);
+        setHashPower(Number(data.hash_power) || 10);
+        setIsAdmin(data.is_admin === true);
+        console.log('✅ Estado recargado:', data);
+      }
+    } catch (err) {
+      console.error('Error reloadUserState:', err);
+    }
+  }
+
+  // =====================================================
+  // RELOAD ADMIN STATS
+  // =====================================================
+  async function reloadAdminStats() {
+    try {
+      const r = await fetch(`${API_URL}/api/admin/stats?admin_id=${user.telegram_id}`);
+      const data = await r.json();
+      if (data && !data.error) {
+        setAdminStats(data);
+        setAdminUsers(data.users || []);
+        console.log('✅ Admin stats recargado');
+      }
+    } catch (err) {
+      console.error('Error reloadAdminStats:', err);
+    }
+  }
 
   // =====================================================
   // LOGIN
@@ -89,13 +132,13 @@ function App() {
         console.log('Login:', data);
 
         if (data && data.telegram_id) {
-          const isAdmin = data.is_admin === true || data.telegram_id === ADMIN_ID;
+          const adminStatus = data.is_admin === true || data.telegram_id === ADMIN_ID;
           setUser({
             telegram_id: data.telegram_id,
             first_name: data.first_name || tgName,
             username: data.username || tgUsername,
             is_vip: data.vip_level > 0 ? 1 : 0,
-            isAdmin,
+            isAdmin: adminStatus,
             balance: data.balance || 0,
             hash_power: data.hash_power || 10,
             vip_level: data.vip_level || 0,
@@ -103,7 +146,7 @@ function App() {
           });
           setHoldingWallet(Number(data.balance) || 0);
           setHashPower(Number(data.hash_power) || 10);
-          setIsAdmin(isAdmin);
+          setIsAdmin(adminStatus);
           loadCompletedTasks(data.telegram_id);
         }
       } catch (err) {
@@ -113,7 +156,6 @@ function App() {
         setLoading(false);
       }
 
-      // Registrar referido si viene con parámetro
       if (refBy && refBy !== tgId) {
         try {
           await fetch(`${API_URL}/api/register_referral`, {
@@ -130,7 +172,7 @@ function App() {
   }, []);
 
   // =====================================================
-  // CARGAR TAREAS COMPLETADAS
+  // CARGAR TAREAS
   // =====================================================
   async function loadCompletedTasks(telegramId) {
     try {
@@ -143,7 +185,7 @@ function App() {
   }
 
   // =====================================================
-  // GUARDAR PROGRESO AUTOMÁTICO
+  // GUARDAR PROGRESO
   // =====================================================
   useEffect(() => {
     if (!user.telegram_id) return;
@@ -167,7 +209,7 @@ function App() {
   }, [user.telegram_id, holdingWallet, poolWallet, hashPower]);
 
   // =====================================================
-  // MINADO AUTOMÁTICO
+  // MINADO AUTOMÁTICO - ahora con velocidad correcta
   // =====================================================
   useEffect(() => {
     if (!user.telegram_id || (isAdmin && adminView)) return;
@@ -181,29 +223,22 @@ function App() {
   // CARGAR STATS ADMIN
   // =====================================================
   useEffect(() => {
-    if (!user.isAdmin || !adminView) return;
-    async function loadAdmin() {
-      try {
-        const r = await fetch(`${API_URL}/api/admin/stats?admin_id=${user.telegram_id}`);
-        const data = await r.json();
-        if (data && !data.error) {
-          setAdminStats(data);
-          setAdminUsers(data.users || []);
-        }
-      } catch (err) {
-        console.error('Error admin:', err);
-      }
-    }
-    loadAdmin();
-    const interval = setInterval(loadAdmin, 10000);
+    if (!isAdmin || !adminView) return;
+    reloadAdminStats();
+    const interval = setInterval(reloadAdminStats, 10000);
     return () => clearInterval(interval);
-  }, [user.isAdmin, adminView, user.telegram_id]);
+  }, [isAdmin, adminView, user.telegram_id]);
 
   // =====================================================
-  // COMPRAR VIP
+  // COMPRAR VIP - FIX FACTURAS
   // =====================================================
   async function handleBuyReal(upgrade) {
+    if (creatingInvoice) return; // evitar doble click
+    setCreatingInvoice(true);
+    showNotification('Creando factura...', 'info');
+
     try {
+      console.log('🛒 Creando factura para plan:', upgrade.planId, 'moneda:', selectedCurrency);
       const r = await fetch(`${API_URL}/api/create_invoice`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -214,20 +249,33 @@ function App() {
         })
       });
       const data = await r.json();
+      console.log('🛒 Respuesta factura:', data);
+
       if (data.error) {
         showModal('Error', data.error, 'error');
         return;
       }
+
+      if (!data.invoice_url) {
+        showModal('Error', 'No se pudo crear la factura. Intenta de nuevo.', 'error');
+        return;
+      }
+
+      // Abrir página de Plisio
       if (window.Telegram?.WebApp) {
         window.Telegram.WebApp.openLink(data.invoice_url);
       } else {
         window.open(data.invoice_url, '_blank');
       }
+
       setPaymentInfo({ ...upgrade, tx_id: data.tx_id });
       startCheckingPayment(data.tx_id);
+      showNotification('Factura creada. ¡Paga en la página abierta!', 'success');
     } catch (err) {
       console.error('Error factura:', err);
-      showModal('Error', 'No se pudo crear la factura', 'error');
+      showModal('Error', 'No se pudo conectar con el servidor. Intenta de nuevo.', 'error');
+    } finally {
+      setCreatingInvoice(false);
     }
   }
 
@@ -239,22 +287,20 @@ function App() {
       try {
         const r = await fetch(`${API_URL}/api/check_invoice/${txId}`);
         const data = await r.json();
+        console.log(`Check #${attempts}:`, data.status);
+
         if (data.status === 'completed' || data.status === 'confirmed') {
           clearInterval(checkPaymentIntervalRef.current);
           setCheckingPayment(false);
           setPaymentInfo(null);
           showModal('¡VIP Activado!', `Tu plan VIP está activo. Tu hash power aumentó.`, 'success');
-          // Recargar estado
-          const sr = await fetch(`${API_URL}/api/state/${user.telegram_id}`);
-          const sdata = await sr.json();
-          if (sdata && !sdata.error) {
-            setHashPower(sdata.hash_power);
-            setUser(prev => ({ ...prev, vip_level: sdata.vip_level, is_vip: sdata.vip_level > 0 ? 1 : 0 }));
-          }
+          // 🚀 FIX: Recargar estado completo
+          await reloadUserState(user.telegram_id);
         }
         if (attempts >= 60) {
           clearInterval(checkPaymentIntervalRef.current);
           setCheckingPayment(false);
+          showNotification('Timeout esperando pago. Si ya pagaste, recarga la página.', 'error');
         }
       } catch (err) {
         console.error('Error check:', err);
@@ -268,7 +314,7 @@ function App() {
   const handleClaim = () => {
     setHoldingWallet(prev => prev + poolWallet);
     setPoolWallet(0);
-    showModal('¡Reclamado!', `Has movido ${poolWallet.toFixed(4)} $KABUTO a tu billetera principal.`);
+    showModal('¡Reclamado!', `Has movido $KABUTO a tu billetera principal.`);
   };
 
   // =====================================================
@@ -324,23 +370,18 @@ function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ admin_id: user.telegram_id, telegram_id })
       });
-      // Recargar
-      const r = await fetch(`${API_URL}/api/admin/stats?admin_id=${user.telegram_id}`);
-      const data = await r.json();
-      if (data && !data.error) {
-        setAdminStats(data);
-        setAdminUsers(data.users || []);
-      }
+      await reloadAdminStats();
     } catch (err) {
       console.error('Error ban:', err);
     }
   }
 
   // =====================================================
-  // ACTIVAR VIP MANUAL (admin)
+  // ACTIVAR VIP MANUAL - FIX: recarga el estado admin
   // =====================================================
   async function activateVipManual(telegramId, planId) {
     try {
+      showNotification('Activando VIP...', 'info');
       const r = await fetch(`${API_URL}/api/admin/activate_vip`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -349,16 +390,46 @@ function App() {
       const data = await r.json();
       if (data.success) {
         showNotification('VIP activado manualmente', 'success');
-        // Recargar
-        const sr = await fetch(`${API_URL}/api/admin/stats?admin_id=${user.telegram_id}`);
-        const sdata = await sr.json();
-        if (sdata && !sdata.error) {
-          setAdminStats(sdata);
-          setAdminUsers(sdata.users || []);
+        // 🚀 FIX: Recargar admin stats para ver cambios
+        await reloadAdminStats();
+        // Si el VIP se activó al propio admin, recargar su estado también
+        if (telegramId === user.telegram_id) {
+          await reloadUserState(user.telegram_id);
         }
+      } else {
+        showNotification(data.error || 'Error al activar VIP', 'error');
       }
     } catch (err) {
       console.error('Error VIP manual:', err);
+      showNotification('Error de conexión', 'error');
+    }
+  }
+
+  // =====================================================
+  // 🆕 REMOVER VIP MANUAL
+  // =====================================================
+  async function removeVipManual(telegramId) {
+    if (!confirm('¿Quitar el VIP a este usuario?')) return;
+    try {
+      showNotification('Quitando VIP...', 'info');
+      const r = await fetch(`${API_URL}/api/admin/remove_vip`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ admin_id: user.telegram_id, telegram_id: telegramId })
+      });
+      const data = await r.json();
+      if (data.success) {
+        showNotification('VIP removido', 'success');
+        await reloadAdminStats();
+        if (telegramId === user.telegram_id) {
+          await reloadUserState(user.telegram_id);
+        }
+      } else {
+        showNotification(data.error || 'Error al remover VIP', 'error');
+      }
+    } catch (err) {
+      console.error('Error remove VIP:', err);
+      showNotification('Error de conexión', 'error');
     }
   }
 
@@ -409,7 +480,7 @@ function App() {
     } catch (err) {
       showModal('Error', 'No se pudo conectar', 'error');
     }
-  };
+  }
 
   const handleMaxWithdraw = () => setWithdrawAmount((holdingWallet * KABUTO_PRICE_USD).toFixed(2));
   const copyLink = () => {
@@ -434,9 +505,6 @@ function App() {
   const activeVipReferrals = referrals.filter(r => r.is_vip === 1).length;
   const canWithdraw = user.is_vip === 1 && activeVipReferrals >= REQUIRED_VIP_REFERRALS;
 
-  // =====================================================
-  // PLANES VIP
-  // =====================================================
   const realUpgrades = [
     { id: 'real1', planId: 1, name: 'VIP 1 - Básico', cost_ton: 1, hashAdd: 50, image: '/vip-diamond.png' },
     { id: 'real2', planId: 2, name: 'VIP 2 - Pro', cost_ton: 5, hashAdd: 200, image: '/vip-dragon.png' },
@@ -463,12 +531,13 @@ function App() {
   ];
 
   // =====================================================
-  // LOADING
+  // LOADING - 🚀 FIX: usa kabuto-coin.png en lugar de emoji
   // =====================================================
   if (loading) {
     return (
       <div className="phone-screen loading-screen" translate="no">
-        <div className="loading-coin">🦏</div>
+        <img src="/kabuto-coin.png" alt="Kabuto" className="loading-coin-img" onError={(e) => { e.target.style.display='none'; e.target.nextSibling.style.display='block'; }} />
+        <div className="loading-coin" style={{display:'none'}}>🦏</div>
         <p>Cargando Kabuto Miner...</p>
       </div>
     );
@@ -499,7 +568,7 @@ function App() {
             <div className="admin-finance-card"><span>Total Retiros Pagados</span><strong>${Number(adminStats?.total_withdrawn || 0).toFixed(2)} USD</strong></div>
           </div>
 
-          <div className="admin-section-title">📊 Estadísticas de Usuarios</div>
+          <div className="admin-section-title">📊 Estadísticas</div>
           <div className="admin-stats-grid">
             <div className="admin-stat-card"><span>👥 Totales</span><strong>{adminStats?.total_users || 0}</strong></div>
             <div className="admin-stat-card"><span>👑 VIPs</span><strong>{adminStats?.purchases?.length || 0}</strong></div>
@@ -520,21 +589,29 @@ function App() {
                 </div>
                 <div className="admin-user-actions">
                   <span className="user-hash">⚡ {u.hash_power} H/s</span>
-                  <select
-                    onChange={(e) => {
-                      if (e.target.value) activateVipManual(u.telegram_id, e.target.value);
-                      e.target.value = '';
-                    }}
-                    defaultValue=""
-                    style={{background:'#21262d',color:'#fff',border:'1px solid #30363d',borderRadius:'4px',padding:'4px 8px',fontSize:'12px'}}
-                  >
-                    <option value="">+ VIP</option>
-                    <option value="1">VIP 1</option>
-                    <option value="2">VIP 2</option>
-                    <option value="3">VIP 3</option>
-                    <option value="4">VIP 4</option>
-                    <option value="5">VIP 5</option>
-                  </select>
+                  {u.vip_level > 0 ? (
+                    // 🆕 Si tiene VIP, mostrar botón para quitar
+                    <button className="ban-btn unban" onClick={() => removeVipManual(u.telegram_id)}>
+                      Quitar VIP
+                    </button>
+                  ) : (
+                    // Si no tiene VIP, mostrar select para activar
+                    <select
+                      onChange={(e) => {
+                        if (e.target.value) activateVipManual(u.telegram_id, e.target.value);
+                        e.target.value = '';
+                      }}
+                      defaultValue=""
+                      style={{background:'#21262d',color:'#fff',border:'1px solid #30363d',borderRadius:'4px',padding:'4px 8px',fontSize:'12px'}}
+                    >
+                      <option value="">+ VIP</option>
+                      <option value="1">VIP 1</option>
+                      <option value="2">VIP 2</option>
+                      <option value="3">VIP 3</option>
+                      <option value="4">VIP 4</option>
+                      <option value="5">VIP 5</option>
+                    </select>
+                  )}
                   {u.telegram_id !== ADMIN_ID && (
                     <button className={`ban-btn ${u.banned ? 'unban' : ''}`} onClick={() => handleBanUser(u.telegram_id, u.banned)}>
                       {u.banned ? 'Desbloquear' : 'Bloquear'}
@@ -648,7 +725,13 @@ function App() {
                 <img src={up.image} alt={up.name} className="upgrade-emoji" onError={(e) => e.target.innerHTML='💎'} />
                 <div><strong>{up.name}</strong><span className="upgrade-profit">+{up.hashAdd} H/s</span></div>
               </div>
-              <button className="buy-btn vip-btn" onClick={() => handleBuyReal(up)}>${up.cost_ton}</button>
+              <button
+                className="buy-btn vip-btn"
+                onClick={() => handleBuyReal(up)}
+                disabled={creatingInvoice}
+              >
+                {creatingInvoice ? '...' : `$${up.cost_ton}`}
+              </button>
             </div>
           ))}
         </div>
@@ -658,8 +741,8 @@ function App() {
         <div className="payment-modal-overlay">
           <div className="payment-modal">
             <h3>Pago de {paymentInfo.name}</h3>
-            <p>Se abrió la página de Plisio para que pagues <strong>{paymentInfo.cost_ton} USD</strong> en {selectedCurrency}.</p>
-            <p className="payment-warning">Una vez que hayas hecho el pago, espera. La verificación es automática.</p>
+            <p>Se abrió la página de Plisio para que pagues <strong>${paymentInfo.cost_ton} USD</strong> en {selectedCurrency}.</p>
+            <p className="payment-warning">La verificación es automática. No cierres esta ventana.</p>
             <button className="claim-btn vip-btn" onClick={() => setPaymentInfo(null)} style={{marginTop: '20px'}}>Cerrar</button>
           </div>
         </div>
