@@ -525,7 +525,6 @@ function App() {
     { code: 'TON', icon: '💎', img: '/ton.png' },
     { code: 'LTC', icon: '🪙', img: '/ltc.png' },
     { code: 'TRX', icon: '🔴', img: '/trx.png' },
-    { code: 'DOGE', icon: '🐕', img: '/doge.png' },
     { code: 'BNB', icon: '🟡', img: '/bnb.png' },
     { code: 'SOL', icon: '☀️', img: '/sol.png' },
     { code: 'USDC', icon: '🔵', img: '/usdc.png' }

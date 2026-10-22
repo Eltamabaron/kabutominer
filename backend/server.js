@@ -39,7 +39,8 @@ const VIP_PLANS = {
   5: { name: 'VIP 5', price: 50, hash_power: 5000 },
 };
 
-const SUPPORTED_CURRENCIES = ['USDT', 'TON', 'LTC', 'TRX', 'DOGE', 'BNB', 'SOL', 'USDC'];
+// 🚀 FIX: DOGE removido (no soportado por Plisio en esta cuenta)
+const SUPPORTED_CURRENCIES = ['USDT', 'TON', 'LTC', 'TRX', 'BNB', 'SOL', 'USDC'];
 
 // =====================================================
 // MIDDLEWARE
