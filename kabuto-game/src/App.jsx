@@ -2,127 +2,132 @@ import { useState, useEffect, useRef } from 'react';
 import './App.css';
 
 const API_URL = 'https://kabutominer.onrender.com';
-const ADMIN_TELEGRAM_ID = '1159596878';
+const ADMIN_ID = '1159596878';
 
-const VIP_PLANS = [
-  { id: 1, name: 'VIP 1', price: 1, hash_power: 50, color: '#4caf50' },
-  { id: 2, name: 'VIP 2', price: 5, hash_power: 200, color: '#2196f3' },
-  { id: 3, name: 'VIP 3', price: 10, hash_power: 500, color: '#9c27b0' },
-  { id: 4, name: 'VIP 4', price: 25, hash_power: 1500, color: '#ff9800' },
-  { id: 5, name: 'VIP 5', price: 50, hash_power: 5000, color: '#f44336' },
-];
-
-const CURRENCIES = [
-  { code: 'USDT', name: 'USDT', icon: '🟢' },
-  { code: 'TON', name: 'TON', icon: '💎' },
-  { code: 'LTC', name: 'Litecoin', icon: '🪙' },
-  { code: 'TRX', name: 'TRON', icon: '🔴' },
-  { code: 'DOGE', name: 'Dogecoin', icon: '🐕' },
-  { code: 'BNB', name: 'BNB', icon: '🟡' },
-  { code: 'SOL', name: 'Solana', icon: '☀️' },
-  { code: 'USDC', name: 'USDC', icon: '🔵' },
-];
+const KABUTO_PRICE_USD = 0.001;
+const MINING_MULTIPLIER = 0.0000015;
+const REQUIRED_VIP_REFERRALS = 6;
+const MIN_WITHDRAWAL_USD = 5;
+const WITHDRAWAL_FEE = 0.5;
 
 function App() {
-  const [player, setPlayer] = useState({
-    telegram_id: '',
-    username: '',
-    first_name: '',
-    balance: 0,
-    hash_power: 1,
-    vip_level: 0,
-    total_mined: 0
-  });
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [showAdminView, setShowAdminView] = useState(false);
+  const [user, setUser] = useState({ telegram_id: '', first_name: 'Jugador', is_vip: 0, isAdmin: false, balance: 0, hash_power: 10, vip_level: 0, total_mined: 0, username: '' });
+  const [holdingWallet, setHoldingWallet] = useState(0);
+  const [poolWallet, setPoolWallet] = useState(0);
+  const [teamWallet, setTeamWallet] = useState(0);
+  const [hashPower, setHashPower] = useState(10);
+  const [activeTab, setActiveTab] = useState('mina');
+  const [referrals, setReferrals] = useState([]);
+  const [referralLink, setReferralLink] = useState('');
+  const [adminStats, setAdminStats] = useState(null);
+  const [adminUsers, setAdminUsers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('mine');
-  const [showVipModal, setShowVipModal] = useState(false);
-  const [showWithdrawModal, setShowWithdrawModal] = useState(false);
-  const [showWhitepaper, setShowWhitepaper] = useState(false);
-  const [selectedPlan, setSelectedPlan] = useState(null);
-  const [selectedCurrency, setSelectedCurrency] = useState('USDT');
-  const [invoiceData, setInvoiceData] = useState(null);
-  const [checkingPayment, setCheckingPayment] = useState(false);
-  const [withdrawCurrency, setWithdrawCurrency] = useState('USDT');
+
+  const [showWithdrawBox, setShowWithdrawBox] = useState(false);
   const [withdrawAddress, setWithdrawAddress] = useState('');
   const [withdrawAmount, setWithdrawAmount] = useState('');
-  const [completedTasks, setCompletedTasks] = useState([]);
-  const [adminStats, setAdminStats] = useState(null);
-  const [notification, setNotification] = useState(null);
-  const [mining, setMining] = useState(true);
+  const [withdrawCurrency, setWithdrawCurrency] = useState('TON');
+  const [selectedCurrency, setSelectedCurrency] = useState('TON');
 
-  const saveIntervalRef = useRef(null);
+  const [adminView, setAdminView] = useState(false);
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [modal, setModal] = useState({ show: false, title: '', message: '', type: 'success' });
+  const [claimedTasks, setClaimedTasks] = useState([]);
+  const [paymentInfo, setPaymentInfo] = useState(null);
+  const [checkingPayment, setCheckingPayment] = useState(false);
+  const [notification, setNotification] = useState(null);
+
+  const stateRef = useRef();
+  stateRef.current = { holdingWallet, poolWallet, hashPower };
   const checkPaymentIntervalRef = useRef(null);
+
+  const showModal = (title, message, type = 'success') => {
+    setModal({ show: true, title, message, type });
+  };
+
+  const closeModal = () => setModal({ show: false, title: '', message: '', type: '' });
+
+  const showNotification = (message, type = 'info') => {
+    setNotification({ message, type });
+    setTimeout(() => setNotification(null), 3000);
+  };
 
   // =====================================================
   // LOGIN
   // =====================================================
-  async function login() {
-    const tg = window.Telegram?.WebApp;
-    const user = tg?.initDataUnsafe?.user;
+  useEffect(() => {
+    async function login() {
+      let tgId = '1159596878';
+      let tgName = 'Admin';
+      let tgUsername = '';
+      let refBy = null;
 
-    if (!user) {
-      console.error('❌ No se pudo obtener el usuario de Telegram');
-      // Datos de fallback para testing
-      const testUser = { id: ADMIN_TELEGRAM_ID, username: 'TAMABARON', first_name: 'Admin' };
-      await doLogin(testUser);
-      return;
-    }
-
-    const userData = {
-      id: String(user.id),
-      username: user.username || '',
-      first_name: user.first_name || 'Jugador'
-    };
-    console.log('🔍 Login - Telegram user:', userData);
-    await doLogin(userData);
-  }
-
-  async function doLogin(user) {
-    try {
-      const response = await fetch(`${API_URL}/api/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          telegram_id: user.id,
-          username: user.username,
-          first_name: user.first_name
-        })
-      });
-
-      const data = await response.json();
-      console.log('🔍 Login - Respuesta del servidor:', data);
-
-      if (data.error) {
-        console.error('❌ Error login:', data.error);
-        showNotification('Error al iniciar sesión: ' + data.error, 'error');
-        return;
+      if (window.Telegram?.WebApp) {
+        window.Telegram.WebApp.ready();
+        window.Telegram.WebApp.expand();
+        const tgUser = window.Telegram.WebApp.initDataUnsafe?.user;
+        if (tgUser) {
+          tgId = String(tgUser.id);
+          tgName = tgUser.first_name;
+          tgUsername = tgUser.username || '';
+          const startParam = window.Telegram.WebApp.initDataUnsafe?.start_param;
+          if (startParam && startParam.startsWith('ref_')) {
+            refBy = startParam.replace('ref_', '');
+          }
+        }
       }
 
-      setPlayer({
-        telegram_id: data.telegram_id,
-        username: data.username || user.username,
-        first_name: data.first_name || user.first_name,
-        balance: data.balance || 0,
-        hash_power: data.hash_power || 1,
-        vip_level: data.vip_level || 0,
-        total_mined: data.total_mined || 0
-      });
+      setReferralLink(`https://t.me/Kabutominer_bot?start=ref_${tgId}`);
 
-      // 🚨 IMPORTANTE: Forzar is_admin como booleano
-      const adminStatus = data.is_admin === true || data.is_admin === 'true';
-      setIsAdmin(adminStatus);
-      console.log('🔍 is_admin recibido:', data.is_admin, '→ establecido como:', adminStatus);
+      try {
+        const r = await fetch(`${API_URL}/api/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ telegram_id: tgId, username: tgUsername, first_name: tgName })
+        });
+        const data = await r.json();
+        console.log('Login:', data);
 
-      // Cargar tareas completadas
-      loadCompletedTasks(user.id);
-      setLoading(false);
-    } catch (err) {
-      console.error('❌ Error de red en login:', err);
-      showNotification('Error de conexión', 'error');
+        if (data && data.telegram_id) {
+          const isAdmin = data.is_admin === true || data.telegram_id === ADMIN_ID;
+          setUser({
+            telegram_id: data.telegram_id,
+            first_name: data.first_name || tgName,
+            username: data.username || tgUsername,
+            is_vip: data.vip_level > 0 ? 1 : 0,
+            isAdmin,
+            balance: data.balance || 0,
+            hash_power: data.hash_power || 10,
+            vip_level: data.vip_level || 0,
+            total_mined: data.total_mined || 0
+          });
+          setHoldingWallet(Number(data.balance) || 0);
+          setHashPower(Number(data.hash_power) || 10);
+          setIsAdmin(isAdmin);
+          loadCompletedTasks(data.telegram_id);
+        }
+      } catch (err) {
+        console.error('Error login:', err);
+        showNotification('Error de conexión', 'error');
+      } finally {
+        setLoading(false);
+      }
+
+      // Registrar referido si viene con parámetro
+      if (refBy && refBy !== tgId) {
+        try {
+          await fetch(`${API_URL}/api/register_referral`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ referrer_id: refBy, referred_id: tgId })
+          });
+        } catch (err) {
+          console.error('Error referido:', err);
+        }
+      }
     }
-  }
+    login();
+  }, []);
 
   // =====================================================
   // CARGAR TAREAS COMPLETADAS
@@ -131,9 +136,9 @@ function App() {
     try {
       const r = await fetch(`${API_URL}/api/tasks/${telegramId}`);
       const data = await r.json();
-      setCompletedTasks(data.completed || []);
+      setClaimedTasks(data.completed || []);
     } catch (err) {
-      console.error('Error cargando tareas:', err);
+      console.error('Error tareas:', err);
     }
   }
 
@@ -141,93 +146,91 @@ function App() {
   // GUARDAR PROGRESO AUTOMÁTICO
   // =====================================================
   useEffect(() => {
-    if (!player.telegram_id) return;
-
-    saveIntervalRef.current = setInterval(async () => {
+    if (!user.telegram_id) return;
+    const interval = setInterval(async () => {
       try {
         await fetch(`${API_URL}/api/save`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            telegram_id: player.telegram_id,
-            balance: player.balance,
-            hash_power: player.hash_power,
-            total_mined: player.total_mined
+            telegram_id: user.telegram_id,
+            balance: holdingWallet + poolWallet,
+            hash_power: hashPower,
+            total_mined: user.total_mined
           })
         });
       } catch (err) {
         console.error('Error guardando:', err);
       }
     }, 10000);
-
-    return () => clearInterval(saveIntervalRef.current);
-  }, [player.telegram_id, player.balance, player.hash_power, player.total_mined]);
+    return () => clearInterval(interval);
+  }, [user.telegram_id, holdingWallet, poolWallet, hashPower]);
 
   // =====================================================
   // MINADO AUTOMÁTICO
   // =====================================================
   useEffect(() => {
-    if (!mining || !player.telegram_id) return;
-
-    const mineInterval = setInterval(() => {
-      setPlayer(prev => {
-        const mined = prev.hash_power * 0.001;
-        return {
-          ...prev,
-          balance: prev.balance + mined,
-          total_mined: prev.total_mined + mined
-        };
-      });
+    if (!user.telegram_id || (isAdmin && adminView)) return;
+    const interval = setInterval(() => {
+      setPoolWallet(prev => prev + (hashPower * MINING_MULTIPLIER));
     }, 1000);
-
-    return () => clearInterval(mineInterval);
-  }, [mining, player.telegram_id, player.hash_power]);
+    return () => clearInterval(interval);
+  }, [hashPower, user.telegram_id, isAdmin, adminView]);
 
   // =====================================================
-  // INICIAR AL CARGAR
+  // CARGAR STATS ADMIN
   // =====================================================
   useEffect(() => {
-    login();
-  }, []);
+    if (!user.isAdmin || !adminView) return;
+    async function loadAdmin() {
+      try {
+        const r = await fetch(`${API_URL}/api/admin/stats?admin_id=${user.telegram_id}`);
+        const data = await r.json();
+        if (data && !data.error) {
+          setAdminStats(data);
+          setAdminUsers(data.users || []);
+        }
+      } catch (err) {
+        console.error('Error admin:', err);
+      }
+    }
+    loadAdmin();
+    const interval = setInterval(loadAdmin, 10000);
+    return () => clearInterval(interval);
+  }, [user.isAdmin, adminView, user.telegram_id]);
 
   // =====================================================
-  // CREAR FACTURA
+  // COMPRAR VIP
   // =====================================================
-  async function createInvoice(plan) {
-    setSelectedPlan(plan);
+  async function handleBuyReal(upgrade) {
     try {
       const r = await fetch(`${API_URL}/api/create_invoice`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          telegram_id: player.telegram_id,
-          plan_id: plan.id,
+          telegram_id: user.telegram_id,
+          plan_id: upgrade.planId,
           currency: selectedCurrency
         })
       });
       const data = await r.json();
       if (data.error) {
-        showNotification(data.error, 'error');
+        showModal('Error', data.error, 'error');
         return;
       }
-      setInvoiceData(data);
-      // Abrir la URL de Plisio
       if (window.Telegram?.WebApp) {
         window.Telegram.WebApp.openLink(data.invoice_url);
       } else {
         window.open(data.invoice_url, '_blank');
       }
-      // Empezar a verificar pago
+      setPaymentInfo({ ...upgrade, tx_id: data.tx_id });
       startCheckingPayment(data.tx_id);
     } catch (err) {
-      console.error('Error creando factura:', err);
-      showNotification('Error al crear factura', 'error');
+      console.error('Error factura:', err);
+      showModal('Error', 'No se pudo crear la factura', 'error');
     }
   }
 
-  // =====================================================
-  // VERIFICAR PAGO AUTOMÁTICAMENTE
-  // =====================================================
   function startCheckingPayment(txId) {
     setCheckingPayment(true);
     let attempts = 0;
@@ -236,212 +239,231 @@ function App() {
       try {
         const r = await fetch(`${API_URL}/api/check_invoice/${txId}`);
         const data = await r.json();
-        console.log(`Check #${attempts}:`, data.status);
-
         if (data.status === 'completed' || data.status === 'confirmed') {
           clearInterval(checkPaymentIntervalRef.current);
           setCheckingPayment(false);
-          setInvoiceData(null);
-          setShowVipModal(false);
-          showNotification('🎉 ¡VIP Activado! Tu hash power aumentó.', 'success');
-          // Recargar estado del jugador
-          await reloadPlayer();
+          setPaymentInfo(null);
+          showModal('¡VIP Activado!', `Tu plan VIP está activo. Tu hash power aumentó.`, 'success');
+          // Recargar estado
+          const sr = await fetch(`${API_URL}/api/state/${user.telegram_id}`);
+          const sdata = await sr.json();
+          if (sdata && !sdata.error) {
+            setHashPower(sdata.hash_power);
+            setUser(prev => ({ ...prev, vip_level: sdata.vip_level, is_vip: sdata.vip_level > 0 ? 1 : 0 }));
+          }
         }
-        // Máximo 60 intentos (5 min)
         if (attempts >= 60) {
           clearInterval(checkPaymentIntervalRef.current);
           setCheckingPayment(false);
         }
       } catch (err) {
-        console.error('Error verificando pago:', err);
+        console.error('Error check:', err);
       }
     }, 5000);
   }
 
   // =====================================================
-  // RECARGAR ESTADO DEL JUGADOR
+  // RECLAMAR
   // =====================================================
-  async function reloadPlayer() {
-    try {
-      const r = await fetch(`${API_URL}/api/state/${player.telegram_id}`);
-      const data = await r.json();
-      if (data && !data.error) {
-        setPlayer(prev => ({
-          ...prev,
-          balance: data.balance,
-          hash_power: data.hash_power,
-          vip_level: data.vip_level,
-          total_mined: data.total_mined
-        }));
-        setIsAdmin(data.is_admin === true);
-      }
-    } catch (err) {
-      console.error('Error recargando:', err);
-    }
-  }
+  const handleClaim = () => {
+    setHoldingWallet(prev => prev + poolWallet);
+    setPoolWallet(0);
+    showModal('¡Reclamado!', `Has movido ${poolWallet.toFixed(4)} $KABUTO a tu billetera principal.`);
+  };
 
   // =====================================================
-  // RETIRAR
+  // SUBIR NIVEL
   // =====================================================
-  async function handleWithdraw() {
-    if (!withdrawAddress || !withdrawAmount) {
-      showNotification('Completa todos los campos', 'error');
-      return;
-    }
-    if (parseFloat(withdrawAmount) < 1) {
-      showNotification('Mínimo $1', 'error');
-      return;
-    }
-    try {
-      const r = await fetch(`${API_URL}/api/withdraw`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          telegram_id: player.telegram_id,
-          amount: parseFloat(withdrawAmount),
-          currency: withdrawCurrency,
-          address: withdrawAddress
-        })
-      });
-      const data = await r.json();
-      if (data.error) {
-        showNotification(data.error, 'error');
-        return;
-      }
-      showNotification('💸 Retiro procesado correctamente', 'success');
-      setPlayer(prev => ({ ...prev, balance: data.new_balance }));
-      setShowWithdrawModal(false);
-      setWithdrawAddress('');
-      setWithdrawAmount('');
-    } catch (err) {
-      console.error('Error retirando:', err);
-      showNotification('Error al procesar retiro', 'error');
-    }
-  }
+  const handleBuyLevel = () => {
+    const total = holdingWallet + poolWallet;
+    const cost = (Math.floor(hashPower / 100) + 1) * 500;
+    if (total >= cost) {
+      let remaining = cost, newHolding = holdingWallet, newPool = poolWallet;
+      if (newHolding >= remaining) newHolding -= remaining;
+      else { remaining -= newHolding; newHolding = 0; newPool -= remaining; }
+      setHoldingWallet(newHolding);
+      setPoolWallet(newPool);
+      setHashPower(prev => prev + 50);
+      showModal('¡Nivel Subido!', `Ahora eres Nivel ${Math.floor(hashPower / 100) + 2}. +50 H/s`);
+    } else showModal('Saldo Insuficiente', 'Necesitas más $KABUTO para subir de nivel.', 'error');
+  };
 
   // =====================================================
   // COMPLETAR TAREA
   // =====================================================
-  async function completeTask(taskId, reward) {
-    if (completedTasks.includes(taskId)) return;
+  async function handleClaimTask(task) {
+    if (claimedTasks.includes(task.id)) return;
+    if (task.link) {
+      if (window.Telegram?.WebApp) window.Telegram.WebApp.openTelegramLink(task.link);
+      else window.open(task.link, '_blank');
+    }
     try {
       const r = await fetch(`${API_URL}/api/complete_task`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          telegram_id: player.telegram_id,
-          task_id: taskId,
-          reward: reward
-        })
+        body: JSON.stringify({ telegram_id: user.telegram_id, task_id: task.id, reward: task.reward })
       });
       const data = await r.json();
       if (data.success) {
-        setCompletedTasks([...completedTasks, taskId]);
-        setPlayer(prev => ({ ...prev, balance: data.new_balance }));
-        showNotification(`+${reward} $KABUTO`, 'success');
+        setHoldingWallet(data.new_balance);
+        setClaimedTasks(prev => [...prev, task.id]);
+        showModal('¡Tarea Completada!', `Has ganado ${task.reward} $KABUTO.`);
       }
     } catch (err) {
-      console.error('Error completando tarea:', err);
-    }
-  }
-
-  // =====================================================
-  // CARGAR STATS ADMIN
-  // =====================================================
-  async function loadAdminStats() {
-    try {
-      const r = await fetch(`${API_URL}/api/admin/stats?admin_id=${player.telegram_id}`);
-      const data = await r.json();
-      if (data.error) {
-        showNotification(data.error, 'error');
-        return;
-      }
-      setAdminStats(data);
-    } catch (err) {
-      console.error('Error admin stats:', err);
+      console.error('Error tarea:', err);
     }
   }
 
   // =====================================================
   // BANEAR USUARIO
   // =====================================================
-  async function banUser(telegramId) {
-    if (!confirm('¿Banear a este usuario?')) return;
+  async function handleBanUser(telegram_id, currentBanned) {
     try {
-      const r = await fetch(`${API_URL}/api/admin/ban`, {
+      await fetch(`${API_URL}/api/admin/ban`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          admin_id: player.telegram_id,
-          telegram_id: telegramId
-        })
+        body: JSON.stringify({ admin_id: user.telegram_id, telegram_id })
       });
+      // Recargar
+      const r = await fetch(`${API_URL}/api/admin/stats?admin_id=${user.telegram_id}`);
       const data = await r.json();
-      if (data.success) {
-        showNotification('Usuario baneado', 'success');
-        loadAdminStats();
+      if (data && !data.error) {
+        setAdminStats(data);
+        setAdminUsers(data.users || []);
       }
     } catch (err) {
-      console.error('Error baneando:', err);
+      console.error('Error ban:', err);
     }
   }
 
   // =====================================================
-  // ACTIVAR VIP MANUAL
+  // ACTIVAR VIP MANUAL (admin)
   // =====================================================
   async function activateVipManual(telegramId, planId) {
     try {
       const r = await fetch(`${API_URL}/api/admin/activate_vip`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          admin_id: player.telegram_id,
-          telegram_id: telegramId,
-          plan_id: planId
-        })
+        body: JSON.stringify({ admin_id: user.telegram_id, telegram_id: telegramId, plan_id: planId })
       });
       const data = await r.json();
       if (data.success) {
         showNotification('VIP activado manualmente', 'success');
-        loadAdminStats();
-      } else {
-        showNotification(data.error || 'Error', 'error');
+        // Recargar
+        const sr = await fetch(`${API_URL}/api/admin/stats?admin_id=${user.telegram_id}`);
+        const sdata = await sr.json();
+        if (sdata && !sdata.error) {
+          setAdminStats(sdata);
+          setAdminUsers(sdata.users || []);
+        }
       }
     } catch (err) {
-      console.error('Error activando VIP:', err);
+      console.error('Error VIP manual:', err);
     }
   }
 
   // =====================================================
-  // NOTIFICACIONES
+  // VALIDAR DIRECCIÓN
   // =====================================================
-  function showNotification(message, type = 'info') {
-    setNotification({ message, type });
-    setTimeout(() => setNotification(null), 3000);
-  }
+  const validateAddress = (address, currency) => {
+    if (!address) return false;
+    if (currency === 'TON') return /^(U|E)[A-Za-z0-9_-]{46,48}$/.test(address);
+    if (currency === 'USDT') return /^T[A-Za-z0-9]{33}$/.test(address);
+    return true;
+  };
 
   // =====================================================
-  // NIVEL BASADO EN HASH POWER
+  // RETIRAR
   // =====================================================
-  function getLevel(hashPower) {
-    if (hashPower < 10) return { level: 1, name: 'Novato', next: 10 };
-    if (hashPower < 50) return { level: 2, name: 'Aprendiz', next: 50 };
-    if (hashPower < 200) return { level: 3, name: 'Minero', next: 200 };
-    if (hashPower < 500) return { level: 4, name: 'Pro', next: 500 };
-    if (hashPower < 1500) return { level: 5, name: 'Experto', next: 1500 };
-    if (hashPower < 5000) return { level: 6, name: 'Maestro', next: 5000 };
-    return { level: 7, name: 'Leyenda', next: null };
-  }
+  async function processWithdrawal() {
+    if (!withdrawAddress || !withdrawAmount) return showModal('Error', 'Ingresa tu dirección y el monto.', 'error');
+    if (!validateAddress(withdrawAddress, withdrawCurrency)) {
+      return showModal('Dirección Inválida', `La dirección de ${withdrawCurrency} no es válida.`, 'error');
+    }
+    const usd = parseFloat(withdrawAmount);
+    if (usd < MIN_WITHDRAWAL_USD) return showModal('Error', `Mínimo ${MIN_WITHDRAWAL_USD} USD`, 'error');
+    const kabutoToBurn = usd / KABUTO_PRICE_USD;
+    if (kabutoToBurn > holdingWallet) return showModal('Error', 'Saldo insuficiente', 'error');
 
-  const level = getLevel(player.hash_power);
-  const progress = level.next ? (player.hash_power / level.next) * 100 : 100;
+    try {
+      const r = await fetch(`${API_URL}/api/withdraw`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          telegram_id: user.telegram_id,
+          amount: usd,
+          currency: withdrawCurrency,
+          address: withdrawAddress
+        })
+      });
+      const data = await r.json();
+      if (data.success) {
+        showModal('Retiro Enviado', `${usd} USD en ${withdrawCurrency} enviados.\nTXID: ${data.tx_id || 'pending'}`);
+        setHoldingWallet(prev => prev - kabutoToBurn);
+        setShowWithdrawBox(false);
+        setWithdrawAddress('');
+        setWithdrawAmount('');
+      } else {
+        showModal('Error', data.error || 'No se pudo procesar', 'error');
+      }
+    } catch (err) {
+      showModal('Error', 'No se pudo conectar', 'error');
+    }
+  };
+
+  const handleMaxWithdraw = () => setWithdrawAmount((holdingWallet * KABUTO_PRICE_USD).toFixed(2));
+  const copyLink = () => {
+    navigator.clipboard.writeText(referralLink);
+    showModal('Copiado', 'Enlace copiado al portapapeles.');
+  };
+  const openPaymentsChannel = () => {
+    if (window.Telegram?.WebApp) window.Telegram.WebApp.openTelegramLink('https://t.me/kabuto_payments');
+    else window.open('https://t.me/kabuto_payments', '_blank');
+  };
+
+  // =====================================================
+  // VALORES CALCULADOS
+  // =====================================================
+  const totalBalance = holdingWallet + poolWallet;
+  const totalUsdValue = (totalBalance * KABUTO_PRICE_USD).toFixed(4);
+  const dailyProfit = (hashPower * MINING_MULTIPLIER * 86400).toFixed(2);
+  const dailyUsdValue = (dailyProfit * KABUTO_PRICE_USD).toFixed(4);
+  const currentLevel = Math.floor(hashPower / 100) + 1;
+  const nextLevelCost = currentLevel * 500;
+  const nextLevelHash = 50;
+  const activeVipReferrals = referrals.filter(r => r.is_vip === 1).length;
+  const canWithdraw = user.is_vip === 1 && activeVipReferrals >= REQUIRED_VIP_REFERRALS;
+
+  // =====================================================
+  // PLANES VIP
+  // =====================================================
+  const realUpgrades = [
+    { id: 'real1', planId: 1, name: 'VIP 1 - Básico', cost_ton: 1, hashAdd: 50, image: '/vip-diamond.png' },
+    { id: 'real2', planId: 2, name: 'VIP 2 - Pro', cost_ton: 5, hashAdd: 200, image: '/vip-dragon.png' },
+    { id: 'real3', planId: 3, name: 'VIP 3 - Experto', cost_ton: 10, hashAdd: 500, image: '/vip-galaxy.png' },
+    { id: 'real4', planId: 4, name: 'VIP 4 - Maestro', cost_ton: 25, hashAdd: 1500, image: '/vip-cosmic.png' },
+    { id: 'real5', planId: 5, name: 'VIP 5 - Leyenda', cost_ton: 50, hashAdd: 5000, image: '/vip-cosmic.png' }
+  ];
+
+  const tasks = [
+    { id: 'tg_channel', name: 'Únete a nuestro Canal', reward: 100, link: 'https://t.me/kabuto_payments', icon: '📢' },
+    { id: 'daily_login', name: 'Login Diario', reward: 50, link: null, icon: '📅' },
+    { id: 'visit_web', name: 'Visita nuestro Patrocinador', reward: 200, link: 'https://example.com', icon: '🌐' }
+  ];
+
+  const CURRENCIES = [
+    { code: 'USDT', icon: '🟢' }, { code: 'TON', icon: '💎' },
+    { code: 'LTC', icon: '🪙' }, { code: 'TRX', icon: '🔴' },
+    { code: 'DOGE', icon: '🐕' }, { code: 'BNB', icon: '🟡' },
+    { code: 'SOL', icon: '☀️' }, { code: 'USDC', icon: '🔵' }
+  ];
 
   // =====================================================
   // LOADING
   // =====================================================
   if (loading) {
     return (
-      <div className="App loading-screen">
+      <div className="phone-screen loading-screen" translate="no">
         <div className="loading-coin">🦏</div>
         <p>Cargando Kabuto Miner...</p>
       </div>
@@ -449,519 +471,361 @@ function App() {
   }
 
   // =====================================================
-  // RENDER
+  // VISTA ADMIN
+  // =====================================================
+  if (isAdmin && adminView) {
+    return (
+      <div className="phone-screen admin-screen" translate="no">
+        <header className="top-bar">
+          <div className="user-info">
+            <img src="/avatar.png" alt="Avatar" className="avatar" onError={(e) => e.target.src='https://ui-avatars.com/api/?name=Admin&background=ffd700&color=000'} />
+            <div className="user-details">
+              <span className="user-name">Panel Admin</span>
+              <span className="user-level">Control Total</span>
+            </div>
+          </div>
+          <button className="view-toggle-btn" onClick={() => setAdminView(false)}>🎮 Vista Jugador</button>
+        </header>
+        <div className="admin-container">
+          <div className="admin-section-title">💰 Finanzas Reales</div>
+          <div className="admin-finance-grid">
+            <div className="admin-finance-card"><span>Ingresos Totales</span><strong className="text-blue">${Number(adminStats?.total_income || 0).toFixed(2)} USD</strong></div>
+            <div className="admin-finance-card"><span>Fondo Liquidez (70%)</span><strong className="text-blue">${Number(adminStats?.liquidity_70 || 0).toFixed(2)} USD</strong></div>
+            <div className="admin-finance-card"><span>Tu Ganancia (30%)</span><strong className="text-green">${Number(adminStats?.admin_profit_30 || 0).toFixed(2)} USD</strong></div>
+            <div className="admin-finance-card"><span>Total Retiros Pagados</span><strong>${Number(adminStats?.total_withdrawn || 0).toFixed(2)} USD</strong></div>
+          </div>
+
+          <div className="admin-section-title">📊 Estadísticas de Usuarios</div>
+          <div className="admin-stats-grid">
+            <div className="admin-stat-card"><span>👥 Totales</span><strong>{adminStats?.total_users || 0}</strong></div>
+            <div className="admin-stat-card"><span>👑 VIPs</span><strong>{adminStats?.purchases?.length || 0}</strong></div>
+            <div className="admin-stat-card"><span>💵 Balance</span><strong>${Number(adminStats?.total_balance || 0).toFixed(0)}</strong></div>
+            <div className="admin-stat-card"><span>💸 Retiros</span><strong>{adminStats?.withdrawals?.length || 0}</strong></div>
+          </div>
+
+          <div className="admin-section-title">Usuarios ({adminUsers.length})</div>
+          <div className="admin-users-list">
+            {adminUsers.length === 0 ? (
+              <p className="no-friends">Aún no hay usuarios registrados.</p>
+            ) : adminUsers.map(u => (
+              <div key={u.telegram_id} className={`admin-user-card ${u.banned ? 'banned' : ''}`}>
+                <div className="admin-user-info">
+                  <strong>{u.first_name} {u.vip_level > 0 ? '👑' : ''} {u.banned ? '🚫' : ''}</strong>
+                  <span className="user-id-text">ID: {u.telegram_id}</span>
+                  <span className="user-finances">Balance: ${Number(u.balance || 0).toFixed(2)} | VIP: {u.vip_level}</span>
+                </div>
+                <div className="admin-user-actions">
+                  <span className="user-hash">⚡ {u.hash_power} H/s</span>
+                  <select
+                    onChange={(e) => {
+                      if (e.target.value) activateVipManual(u.telegram_id, e.target.value);
+                      e.target.value = '';
+                    }}
+                    defaultValue=""
+                    style={{background:'#21262d',color:'#fff',border:'1px solid #30363d',borderRadius:'4px',padding:'4px 8px',fontSize:'12px'}}
+                  >
+                    <option value="">+ VIP</option>
+                    <option value="1">VIP 1</option>
+                    <option value="2">VIP 2</option>
+                    <option value="3">VIP 3</option>
+                    <option value="4">VIP 4</option>
+                    <option value="5">VIP 5</option>
+                  </select>
+                  {u.telegram_id !== ADMIN_ID && (
+                    <button className={`ban-btn ${u.banned ? 'unban' : ''}`} onClick={() => handleBanUser(u.telegram_id, u.banned)}>
+                      {u.banned ? 'Desbloquear' : 'Bloquear'}
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {modal.show && (
+          <div className="modal-overlay">
+            <div className={`modal-box ${modal.type === 'error' ? 'error' : 'success'}`}>
+              <span className="modal-icon">{modal.type === 'error' ? '❌' : '✅'}</span>
+              <h3 className="modal-title">{modal.title}</h3>
+              <p className="modal-message" style={{whiteSpace: 'pre-line'}}>{modal.message}</p>
+              <button className="claim-btn" onClick={closeModal} style={{marginTop: '15px', width: '100%'}}>CERRAR</button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // =====================================================
+  // VISTA JUGADOR
   // =====================================================
   return (
-    <div className="App">
-      {/* Notificación flotante */}
+    <div className="phone-screen" translate="no">
       {notification && (
-        <div className={`notification ${notification.type}`}>
-          {notification.message}
+        <div className={`notification ${notification.type}`}>{notification.message}</div>
+      )}
+
+      <header className="top-bar">
+        <div className="user-info">
+          <img src="/avatar.png" alt="Avatar" className="avatar" onError={(e) => e.target.src='https://ui-avatars.com/api/?name=' + encodeURIComponent(user.first_name) + '&background=ffd700&color=000'} />
+          <div className="user-details">
+            <span className="user-name">{user.first_name}</span>
+            <span className="user-level">Nivel {currentLevel} • {user.is_vip ? 'VIP ✅' : 'FREE'}</span>
+          </div>
+        </div>
+        <div className="top-bar-right">
+          {isAdmin && <button className="view-toggle-btn" onClick={() => setAdminView(true)}>🛠️</button>}
+          <button className="view-toggle-btn" onClick={() => setActiveTab('whitepaper')}>📖</button>
+        </div>
+      </header>
+
+      {activeTab !== 'whitepaper' && (
+        <div className="assets-section">
+          <div className="price-tag">Precio $KABUTO: ${KABUTO_PRICE_USD}</div>
+          <span className="assets-label">TOTAL ACTIVOS</span>
+          <h1 className="total-balance">{totalBalance.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 4})} <span className="token-symbol">$KABUTO</span></h1>
+          <span className="usd-value">≈ ${totalUsdValue} USD</span>
+          <div className="wallets">
+            <div className="wallet-box"><span>HOLDING WALLET</span><strong>{holdingWallet.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 4})}</strong></div>
+            <div className="wallet-box"><span>POOL WALLET</span><strong>{poolWallet.toLocaleString('en-US', {minimumFractionDigits: 2, maximumFractionDigits: 4})}</strong></div>
+          </div>
+          <div className="daily-profit-box">📈 Ganancia Diaria: +{dailyProfit} $KABUTO (≈ ${dailyUsdValue} USD)</div>
         </div>
       )}
 
-      {/* Toggle Admin/Jugador (solo si es admin) */}
-      {isAdmin && (
-        <button
-          onClick={() => setShowAdminView(!showAdminView)}
-          className="admin-toggle-btn"
-        >
-          {showAdminView ? '🎮 Vista Jugador' : '👑 Vista Admin'}
-        </button>
-      )}
-
-      {/* ====================== VISTA ADMIN ====================== */}
-      {isAdmin && showAdminView && (
-        <div className="admin-panel">
-          <h1>👑 Panel de Administración</h1>
-          <button onClick={loadAdminStats} className="refresh-btn">🔄 Actualizar</button>
-
-          {adminStats && (
-            <>
-              <div className="admin-stats-grid">
-                <div className="stat-card">
-                  <div className="stat-icon">👥</div>
-                  <div className="stat-value">{adminStats.total_users}</div>
-                  <div className="stat-label">Usuarios</div>
-                </div>
-                <div className="stat-card">
-                  <div className="stat-icon">💰</div>
-                  <div className="stat-value">${adminStats.total_income.toFixed(2)}</div>
-                  <div className="stat-label">Ingresos</div>
-                </div>
-                <div className="stat-card">
-                  <div className="stat-icon">💸</div>
-                  <div className="stat-value">${adminStats.total_withdrawn.toFixed(2)}</div>
-                  <div className="stat-label">Retiros</div>
-                </div>
-                <div className="stat-card">
-                  <div className="stat-icon">💵</div>
-                  <div className="stat-value">${adminStats.liquidity_70.toFixed(2)}</div>
-                  <div className="stat-label">Liquidez (70%)</div>
-                </div>
-                <div className="stat-card">
-                  <div className="stat-icon">📈</div>
-                  <div className="stat-value">${adminStats.admin_profit_30.toFixed(2)}</div>
-                  <div className="stat-label">Ganancia (30%)</div>
-                </div>
-                <div className="stat-card">
-                  <div className="stat-icon">⚖️</div>
-                  <div className="stat-value">${adminStats.total_balance.toFixed(2)}</div>
-                  <div className="stat-label">Balance usuarios</div>
-                </div>
-              </div>
-
-              <h2>👥 Usuarios ({adminStats.users.length})</h2>
-              <div className="users-list">
-                {adminStats.users.map(u => (
-                  <div key={u.telegram_id} className="user-row">
-                    <div className="user-info">
-                      <strong>{u.first_name}</strong>
-                      {u.username && <span className="username">@{u.username}</span>}
-                      <span className="user-id">ID: {u.telegram_id}</span>
-                      {u.banned === 1 && <span className="banned-badge">BANEADO</span>}
-                    </div>
-                    <div className="user-stats">
-                      <span>💰 ${u.balance.toFixed(2)}</span>
-                      <span>⚡ {u.hash_power} H/s</span>
-                      <span>👑 VIP {u.vip_level}</span>
-                    </div>
-                    <div className="user-actions">
-                      <select
-                        onChange={(e) => {
-                          if (e.target.value) activateVipManual(u.telegram_id, e.target.value);
-                          e.target.value = '';
-                        }}
-                        defaultValue=""
-                      >
-                        <option value="">+ VIP</option>
-                        <option value="1">VIP 1</option>
-                        <option value="2">VIP 2</option>
-                        <option value="3">VIP 3</option>
-                        <option value="4">VIP 4</option>
-                        <option value="5">VIP 5</option>
-                      </select>
-                      {u.banned === 0 && u.telegram_id !== ADMIN_TELEGRAM_ID && (
-                        <button onClick={() => banUser(u.telegram_id)} className="ban-btn">🚫 Banear</button>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <h2>💸 Retiros recientes</h2>
-              <div className="withdrawals-list">
-                {adminStats.withdrawals.length === 0 ? (
-                  <p className="empty">Sin retiros aún</p>
-                ) : (
-                  adminStats.withdrawals.slice(-10).reverse().map((w, i) => (
-                    <div key={i} className="withdrawal-row">
-                      <span>👤 {w.telegram_id}</span>
-                      <span>💰 ${w.amount} {w.currency}</span>
-                      <span>📍 {w.address?.substring(0, 10)}...</span>
-                      <span>✅ {w.status}</span>
-                    </div>
-                  ))
-                )}
-              </div>
-
-              <h2>📦 Compras recientes</h2>
-              <div className="purchases-list">
-                {adminStats.purchases.length === 0 ? (
-                  <p className="empty">Sin compras aún</p>
-                ) : (
-                  adminStats.purchases.slice(-10).reverse().map((p, i) => (
-                    <div key={i} className="purchase-row">
-                      <span>👤 {p.telegram_id}</span>
-                      <span>📦 {p.plan}</span>
-                      <span>💰 ${p.amount_usd}</span>
-                      <span>✅ {p.status}</span>
-                    </div>
-                  ))
-                )}
-              </div>
-            </>
-          )}
+      {checkingPayment && (
+        <div className="checking-payment">
+          <div className="spinner"></div>
+          <p>Esperando confirmación de pago...</p>
         </div>
       )}
 
-      {/* ====================== VISTA JUGADOR ====================== */}
-      {(!isAdmin || !showAdminView) && (
-        <>
-          {/* Header */}
-          <div className="header">
-            <div className="player-info">
-              <h2>🦏 {player.first_name || player.username}</h2>
-              <div className="level-badge">
-                Nivel {level.level} - {level.name}
-              </div>
+      {activeTab === 'mina' && (
+        <div className="coin-area">
+          <div className="profit-text">⚡ {hashPower} H/s</div>
+          <img src="/kabuto-coin.png" alt="Kabuto Coin" className="kabuto-coin" onError={(e) => e.target.innerHTML='🦏'} />
+          <button className="claim-btn" onClick={handleClaim}>RECLAMAR +{poolWallet.toFixed(4)} $KABUTO</button>
+        </div>
+      )}
+
+      {activeTab === 'mejoras' && (
+        <div className="shop-container">
+          <h2 className="shop-title">MINER LEVEL</h2>
+          <p className="shop-subtitle">Sube de nivel para aumentar tu velocidad de minado</p>
+          <div className="level-up-card">
+            <div className="level-info">
+              <span className="current-level">Nivel Actual: {currentLevel}</span>
+              <span className="next-level">Siguiente Nivel: {currentLevel + 1}</span>
+              <span className="next-level-bonus">+{nextLevelHash} H/s</span>
             </div>
-            <div className="balance-display">
-              <div className="balance-label">$KABUTO</div>
-              <div className="balance-amount">{player.balance.toFixed(4)}</div>
-            </div>
+            <div className="level-cost">Costo: {nextLevelCost} $KABUTO</div>
+            <button className="buy-btn" onClick={handleBuyLevel} disabled={totalBalance < nextLevelCost}>SUBIR DE NIVEL</button>
           </div>
+          <div className="divider"></div>
+          <h2 className="shop-title">MEJORAS VIP</h2>
+          <p className="shop-subtitle">Desbloquea poder máximo y habilita retiros pagando con cripto</p>
 
-          {/* Stats principales */}
-          <div className="stats-row">
-            <div className="stat-box">
-              <div className="stat-icon">⚡</div>
-              <div className="stat-info">
-                <div className="stat-value">{player.hash_power} H/s</div>
-                <div className="stat-label">Hash Power</div>
-              </div>
-            </div>
-            <div className="stat-box">
-              <div className="stat-icon">👑</div>
-              <div className="stat-info">
-                <div className="stat-value">VIP {player.vip_level}</div>
-                <div className="stat-label">Nivel VIP</div>
-              </div>
-            </div>
-            <div className="stat-box">
-              <div className="stat-icon">⛏️</div>
-              <div className="stat-info">
-                <div className="stat-value">{player.total_mined.toFixed(2)}</div>
-                <div className="stat-label">Total Minado</div>
-              </div>
-            </div>
-          </div>
-
-          {/* Barra de progreso de nivel */}
-          <div className="progress-section">
-            <div className="progress-bar">
-              <div className="progress-fill" style={{ width: `${progress}%` }}></div>
-            </div>
-            <div className="progress-text">
-              {level.next ? `${player.hash_power}/${level.next} H/s para nivel ${level.level + 1}` : 'Nivel máximo alcanzado'}
-            </div>
-          </div>
-
-          {/* Botón de minado */}
-          <div className="mining-section">
-            <button
-              className={`mine-btn ${mining ? 'mining-active' : ''}`}
-              onClick={() => setMining(!mining)}
-            >
-              <div className="mine-icon">🦏</div>
-              <div className="mine-text">
-                {mining ? 'MINANDO...' : 'PAUSADO'}
-              </div>
-              <div className="mine-rate">
-                +{(player.hash_power * 0.001).toFixed(4)} $KABUTO/s
-              </div>
-            </button>
-          </div>
-
-          {/* Verificando pago */}
-          {checkingPayment && (
-            <div className="checking-payment">
-              <div className="spinner"></div>
-              <p>Esperando confirmación de pago...</p>
-              <p className="small">No cierres esta ventana</p>
-            </div>
-          )}
-
-          {/* Menu inferior flotante */}
-          <div className="bottom-menu">
-            <button
-              className={activeTab === 'mine' ? 'active' : ''}
-              onClick={() => setActiveTab('mine')}
-            >
-              ⛏️ Minar
-            </button>
-            <button
-              className={activeTab === 'vip' ? 'active' : ''}
-              onClick={() => setActiveTab('vip')}
-            >
-              👑 VIP
-            </button>
-            <button
-              className={activeTab === 'tasks' ? 'active' : ''}
-              onClick={() => setActiveTab('tasks')}
-            >
-              📋 Tareas
-            </button>
-            <button
-              className={activeTab === 'wallet' ? 'active' : ''}
-              onClick={() => setActiveTab('wallet')}
-            >
-              💰 Billetera
-            </button>
-          </div>
-
-          {/* Contenido según tab activo */}
-          <div className="content-area">
-            {activeTab === 'mine' && (
-              <div className="tab-content">
-                <h3>⛏️ Minado</h3>
-                <p>Tu escarabajo Kabuto está minando automáticamente.</p>
-                <p>Compra planes VIP para aumentar tu Hash Power y minar más rápido.</p>
-                <button onClick={() => setActiveTab('vip')} className="cta-btn">
-                  Ver planes VIP →
+          <div className="currency-selector">
+            <label>Pagar con:</label>
+            <div className="currency-grid">
+              {CURRENCIES.map(c => (
+                <button key={c.code} className={`currency-btn ${selectedCurrency === c.code ? 'selected' : ''}`} onClick={() => setSelectedCurrency(c.code)}>
+                  <span className="currency-icon">{c.icon}</span>
+                  <span className="currency-code">{c.code}</span>
                 </button>
-                <button onClick={() => setShowWhitepaper(true)} className="link-btn">
-                  📖 Leer Whitepaper
-                </button>
+              ))}
+            </div>
+          </div>
+
+          {realUpgrades.map(up => (
+            <div key={up.id} className="upgrade-card vip-card">
+              <div className="upgrade-info">
+                <img src={up.image} alt={up.name} className="upgrade-emoji" onError={(e) => e.target.innerHTML='💎'} />
+                <div><strong>{up.name}</strong><span className="upgrade-profit">+{up.hashAdd} H/s</span></div>
               </div>
-            )}
+              <button className="buy-btn vip-btn" onClick={() => handleBuyReal(up)}>${up.cost_ton}</button>
+            </div>
+          ))}
+        </div>
+      )}
 
-            {activeTab === 'vip' && (
-              <div className="tab-content">
-                <h3>👑 Planes VIP</h3>
-                <p>Aumenta tu Hash Power y mina más rápido</p>
+      {paymentInfo && (
+        <div className="payment-modal-overlay">
+          <div className="payment-modal">
+            <h3>Pago de {paymentInfo.name}</h3>
+            <p>Se abrió la página de Plisio para que pagues <strong>{paymentInfo.cost_ton} USD</strong> en {selectedCurrency}.</p>
+            <p className="payment-warning">Una vez que hayas hecho el pago, espera. La verificación es automática.</p>
+            <button className="claim-btn vip-btn" onClick={() => setPaymentInfo(null)} style={{marginTop: '20px'}}>Cerrar</button>
+          </div>
+        </div>
+      )}
 
-                {/* Selector de moneda */}
+      {activeTab === 'tareas' && (
+        <div className="shop-container">
+          <h2 className="shop-title">TAREAS DIARIAS</h2>
+          <p className="shop-subtitle">Gana $KABUTO gratis completando tareas</p>
+          {tasks.map(task => {
+            const isClaimed = claimedTasks.includes(task.id);
+            return (
+              <div key={task.id} className={`upgrade-card task-card ${isClaimed ? 'owned-card' : ''}`}>
+                <div className="upgrade-info">
+                  <span className="task-icon">{task.icon}</span>
+                  <div><strong>{task.name}</strong><span className="upgrade-profit">+{task.reward} $KABUTO</span></div>
+                </div>
+                <button className="buy-btn" onClick={() => handleClaimTask(task)} disabled={isClaimed}>{isClaimed ? 'HECHO ✅' : 'RECLAMAR'}</button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {activeTab === 'amigos' && (
+        <div className="shop-container">
+          <h2 className="shop-title">INVITA Y GANA</h2>
+          <p className="shop-subtitle">Necesitas {REQUIRED_VIP_REFERRALS} referidos VIP para desbloquear retiros.</p>
+          <div className="team-wallet-card">
+            <div className="team-wallet-info">
+              <span className="team-wallet-title">👥 TEAM WALLET</span>
+              <span className="team-wallet-desc">Gana el 10% de lo que minan tus amigos + 5% de sus compras.</span>
+            </div>
+            <div className="team-wallet-balance">
+              <strong>{teamWallet.toFixed(2)} $KABUTO</strong>
+              <button className="buy-btn" onClick={() => showNotification('Próximamente', 'info')} disabled={teamWallet <= 0}>RECLAMAR</button>
+            </div>
+          </div>
+          <div className="referral-box">
+            <input type="text" value={referralLink} readOnly className="ref-input" />
+            <button className="buy-btn" onClick={copyLink}>Copiar</button>
+          </div>
+          <h3 className="friends-title">AMIGOS VIP ({activeVipReferrals}/{REQUIRED_VIP_REFERRALS})</h3>
+          {referrals.length === 0 ? <p className="no-friends">Aún no has invitado a nadie. ¡Comparte tu enlace!</p> : referrals.map((ref) => (
+            <div key={ref.telegram_id} className="upgrade-card">
+              <div className="upgrade-info">
+                <span className="upgrade-emoji">{ref.is_vip ? '👑' : '👤'}</span>
+                <div><strong>{ref.first_name} {ref.is_vip ? '(VIP)' : '(FREE)'}</strong><span className="upgrade-profit">{ref.is_vip ? 'Activo' : 'Inactivo'}</span></div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {activeTab === 'perfil' && (
+        <div className="shop-container profile-container">
+          <div className="profile-header">
+            <img src="/avatar.png" alt="Avatar" className="profile-avatar" onError={(e) => e.target.src='https://ui-avatars.com/api/?name=' + encodeURIComponent(user.first_name) + '&background=ffd700&color=000'} />
+            <h2 className="profile-name">{user.first_name}</h2>
+            <span className="profile-id">ID: {user.telegram_id}</span>
+          </div>
+          <div className="stats-grid">
+            <div className="stat-item"><span className="stat-label">⚡ Poder de Minado</span><strong className="stat-value">{hashPower} H/s</strong></div>
+            <div className="stat-item"><span className="stat-label">📊 Nivel de Minero</span><strong className="stat-value">Nivel {currentLevel}</strong></div>
+            <div className="stat-item"><span className="stat-label">👑 Nivel VIP</span><strong className="stat-value">{user.vip_level}</strong></div>
+            <div className="stat-item"><span className="stat-label">⛏️ Total Minado</span><strong className="stat-value">{user.total_mined.toFixed(2)}</strong></div>
+          </div>
+          <div className="wallet-section transparent-section" onClick={openPaymentsChannel} style={{cursor: 'pointer'}}>
+            <h3>🛡️ CANAL DE TRANSPARENCIA</h3>
+            <p>Verifica todos los pagos reales de la plataforma en tiempo real.</p>
+            <button className="claim-btn transparent-btn">📜 VER COMPROBANTES</button>
+          </div>
+          <div className={canWithdraw ? 'wallet-section blue unlocked' : 'wallet-section blue locked'}>
+            <h3>BILLETERA DE RETIRO</h3>
+            <div className="withdraw-reqs">
+              <p>Requisitos para retirar:</p>
+              <span className={user.is_vip ? 'req-tag ok' : 'req-tag no'}>{user.is_vip ? '✅' : '❌'} Comprar VIP</span>
+              <span className={activeVipReferrals >= REQUIRED_VIP_REFERRALS ? 'req-tag ok' : 'req-tag no'}>{activeVipReferrals >= REQUIRED_VIP_REFERRALS ? '✅' : '❌'} Invitar {REQUIRED_VIP_REFERRALS} amigos VIP ({activeVipReferrals}/{REQUIRED_VIP_REFERRALS})</span>
+              <span className="req-tag ok">💵 Mínimo: {MIN_WITHDRAWAL_USD} USD (Fee: {WITHDRAWAL_FEE} USD)</span>
+            </div>
+            <button className="claim-btn connect-wallet-btn" onClick={() => canWithdraw ? setShowWithdrawBox(true) : showModal('Requisitos Incompletos', 'Necesitas VIP y 6 referidos VIP para retirar.', 'error')}>
+              {canWithdraw ? '💸 RETIRAR GANANCIAS' : '🔒 BLOQUEADO'}
+            </button>
+          </div>
+          {showWithdrawBox && (
+            <div className="payment-modal-overlay">
+              <div className="payment-modal">
+                <h3>Retirar Ganancias</h3>
+                <p>Saldo disponible: <strong>${(holdingWallet * KABUTO_PRICE_USD).toFixed(2)} USD</strong></p>
                 <div className="currency-selector">
-                  <label>Pagar con:</label>
+                  <label>Moneda:</label>
                   <div className="currency-grid">
                     {CURRENCIES.map(c => (
-                      <button
-                        key={c.code}
-                        className={`currency-btn ${selectedCurrency === c.code ? 'selected' : ''}`}
-                        onClick={() => setSelectedCurrency(c.code)}
-                      >
+                      <button key={c.code} className={`currency-btn ${withdrawCurrency === c.code ? 'selected' : ''}`} onClick={() => setWithdrawCurrency(c.code)}>
                         <span className="currency-icon">{c.icon}</span>
                         <span className="currency-code">{c.code}</span>
                       </button>
                     ))}
                   </div>
                 </div>
-
-                {/* Planes */}
-                <div className="plans-grid">
-                  {VIP_PLANS.map(plan => (
-                    <div
-                      key={plan.id}
-                      className="plan-card"
-                      style={{ borderColor: plan.color }}
-                    >
-                      <div className="plan-header" style={{ background: plan.color }}>
-                        {plan.name}
-                      </div>
-                      <div className="plan-price">${plan.price}</div>
-                      <div className="plan-hashpower">+{plan.hash_power} H/s</div>
-                      <button
-                        onClick={() => createInvoice(plan)}
-                        className="plan-btn"
-                        style={{ background: plan.color }}
-                      >
-                        Comprar
-                      </button>
-                    </div>
-                  ))}
+                <p className="payment-warning">Mínimo: {MIN_WITHDRAWAL_USD} USD | Comisión: {WITHDRAWAL_FEE} USD</p>
+                <div className="withdraw-input-box">
+                  <input type="number" step="0.01" placeholder="Monto en USD" value={withdrawAmount} onChange={(e) => setWithdrawAmount(e.target.value)} className="ref-input" />
+                  <button onClick={handleMaxWithdraw} className="max-btn">MAX</button>
                 </div>
+                <input type="text" placeholder={`Tu dirección ${withdrawCurrency}`} value={withdrawAddress} onChange={(e) => setWithdrawAddress(e.target.value)} className="ref-input" style={{marginBottom: '15px'}} />
+                <button className="claim-btn vip-btn" onClick={processWithdrawal}>CONFIRMAR RETIRO</button>
+                <button className="claim-btn" onClick={() => setShowWithdrawBox(false)} style={{marginTop: '10px', background: '#555'}}>CANCELAR</button>
               </div>
-            )}
-
-            {activeTab === 'tasks' && (
-              <div className="tab-content">
-                <h3>📋 Tareas Diarias</h3>
-                <div className="tasks-list">
-                  <div className="task-card">
-                    <div className="task-info">
-                      <strong>📖 Leer Whitepaper</strong>
-                      <span>Recompensa: +10 $KABUTO</span>
-                    </div>
-                    <button
-                      disabled={completedTasks.includes('read_whitepaper')}
-                      onClick={() => {
-                        setShowWhitepaper(true);
-                        completeTask('read_whitepaper', 10);
-                      }}
-                    >
-                      {completedTasks.includes('read_whitepaper') ? '✅' : 'Hacer'}
-                    </button>
-                  </div>
-
-                  <div className="task-card">
-                    <div className="task-info">
-                      <strong>📢 Unirse al canal</strong>
-                      <span>Recompensa: +5 $KABUTO</span>
-                    </div>
-                    <button
-                      disabled={completedTasks.includes('join_channel')}
-                      onClick={() => {
-                        window.Telegram?.WebApp?.openLink('https://t.me/kabuto_payments');
-                        completeTask('join_channel', 5);
-                      }}
-                    >
-                      {completedTasks.includes('join_channel') ? '✅' : 'Unirse'}
-                    </button>
-                  </div>
-
-                  <div className="task-card">
-                    <div className="task-info">
-                      <strong>🎫 Invitar amigos</strong>
-                      <span>Usa /referral en el bot</span>
-                    </div>
-                    <button disabled>
-                      En bot
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {activeTab === 'wallet' && (
-              <div className="tab-content">
-                <h3>💰 Billetera</h3>
-                <div className="wallet-balance">
-                  <div className="balance-label">Balance disponible</div>
-                  <div className="balance-big">{player.balance.toFixed(4)} $KABUTO</div>
-                </div>
-
-                <button
-                  onClick={() => setShowWithdrawModal(true)}
-                  className="cta-btn"
-                  disabled={player.balance < 1}
-                >
-                  💸 Retirar
-                </button>
-                {player.balance < 1 && (
-                  <p className="small">Necesitas al menos $1 para retirar</p>
-                )}
-
-                <div className="referral-section">
-                  <h4>🎫 Enlace de referido</h4>
-                  <p>Compártelo y gana 10% de compras + 5% de minado</p>
-                  <div className="referral-link">
-                    https://t.me/Kabutominer_bot?start=ref_{player.telegram_id}
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        </>
-      )}
-
-      {/* ====================== MODAL VIP ====================== */}
-      {showVipModal && invoiceData && (
-        <div className="modal-overlay" onClick={() => setShowVipModal(false)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
-            <h3>💳 Pago en proceso</h3>
-            <p>Estamos esperando la confirmación de tu pago en {selectedCurrency}.</p>
-            <div className="payment-info">
-              <div>Monto: {invoiceData.amount} {invoiceData.currency}</div>
-              <div>Plan: {invoiceData.plan.name}</div>
             </div>
-            <button onClick={() => window.open(invoiceData.invoice_url, '_blank')}>
-              Abrir página de pago
-            </button>
-            <button onClick={() => setShowVipModal(false)}>Cerrar</button>
+          )}
+        </div>
+      )}
+
+      {activeTab === 'whitepaper' && (
+        <div className="shop-container whitepaper-container">
+          <button className="back-btn" onClick={() => setActiveTab('mina')}>← Volver</button>
+          <h1 className="whitepaper-title">Whitepaper $KABUTO</h1>
+          <p className="whitepaper-subtitle">La economía detrás de Kabuto Miner</p>
+          <div className="whitepaper-card">
+            <h3>📊 Tokenómica</h3>
+            <div className="wp-stat-row"><span>Nombre del Token</span><strong>Kabuto Miner ($KABUTO)</strong></div>
+            <div className="wp-stat-row"><span>Suministro Total</span><strong>1,000,000,000 $KABUTO</strong></div>
+            <div className="wp-stat-row"><span>Precio Actual</span><strong>$0.001 USD</strong></div>
+            <div className="wp-stat-row"><span>Red</span><strong>Telegram (Interna)</strong></div>
+          </div>
+          <div className="whitepaper-card">
+            <h3>💰 Modelo de Sostenibilidad</h3>
+            <p>El sistema está diseñado para ser 100% sostenible. Cuando un usuario invierte en mejoras VIP, el dinero se divide así:</p>
+            <ul className="wp-list">
+              <li>✅ <strong>70%</strong> va al Fondo de Liquidez (para pagar retiros).</li>
+              <li>✅ <strong>30%</strong> es la ganancia del creador y mantenimiento del servidor.</li>
+            </ul>
+            <p>Para retirar, un usuario debe activar el VIP mínimo y traer 6 referidos VIP. Esto asegura que siempre entre dinero nuevo antes de que salga.</p>
+          </div>
+          <div className="whitepaper-card">
+            <h3>🪲 ¿Qué es Kabuto Miner?</h3>
+            <p>Es un juego Play-to-Earn inspirado en el escarabajo rinoceronte (Kabutomushi). Los usuarios simulan la excavación de bloques, ganando $KABUTO que puede ser canjeado por criptomonedas reales via Plisio.</p>
           </div>
         </div>
       )}
 
-      {/* ====================== MODAL RETIRO ====================== */}
-      {showWithdrawModal && (
-        <div className="modal-overlay" onClick={() => setShowWithdrawModal(false)}>
-          <div className="modal" onClick={e => e.stopPropagation()}>
-            <h3>💸 Retirar $KABUTO</h3>
-            <p>Balance disponible: {player.balance.toFixed(4)}</p>
-
-            <label>Moneda:</label>
-            <div className="currency-grid">
-              {CURRENCIES.map(c => (
-                <button
-                  key={c.code}
-                  className={`currency-btn ${withdrawCurrency === c.code ? 'selected' : ''}`}
-                  onClick={() => setWithdrawCurrency(c.code)}
-                >
-                  <span className="currency-icon">{c.icon}</span>
-                  <span className="currency-code">{c.code}</span>
-                </button>
-              ))}
-            </div>
-
-            <label>Dirección de {withdrawCurrency}:</label>
-            <input
-              type="text"
-              value={withdrawAddress}
-              onChange={e => setWithdrawAddress(e.target.value)}
-              placeholder="Pega tu dirección"
-            />
-
-            <label>Monto (USD):</label>
-            <input
-              type="number"
-              value={withdrawAmount}
-              onChange={e => setWithdrawAmount(e.target.value)}
-              placeholder="Mínimo 1"
-              min="1"
-              step="0.01"
-              max={player.balance}
-            />
-
-            <button onClick={handleWithdraw} className="cta-btn">
-              Confirmar retiro
-            </button>
-            <button onClick={() => setShowWithdrawModal(false)}>Cancelar</button>
+      {modal.show && (
+        <div className="modal-overlay">
+          <div className={`modal-box ${modal.type === 'error' ? 'error' : 'success'}`}>
+            <span className="modal-icon">{modal.type === 'error' ? '❌' : '✅'}</span>
+            <h3 className="modal-title">{modal.title}</h3>
+            <p className="modal-message" style={{whiteSpace: 'pre-line'}}>{modal.message}</p>
+            <button className="claim-btn" onClick={closeModal} style={{marginTop: '15px', width: '100%'}}>CERRAR</button>
           </div>
         </div>
       )}
 
-      {/* ====================== MODAL WHITEPAPER ====================== */}
-      {showWhitepaper && (
-        <div className="modal-overlay" onClick={() => setShowWhitepaper(false)}>
-          <div className="modal whitepaper-modal" onClick={e => e.stopPropagation()}>
-            <h2>🦏 Kabuto Miner - Whitepaper</h2>
-
-            <h3>¿Qué es Kabuto Miner?</h3>
-            <p>
-              Kabuto Miner es un juego Play-to-Earn de minería ficticia inspirado en el escarabajo rinocerón japonés (Kabutomushi). Los jugadores minan tokens $KABUTO que pueden retirar en criptomonedas reales.
-            </p>
-
-            <h3>Token $KABUTO</h3>
-            <p>
-              $KABUTO es el token ficticio del juego. Se obtiene minando automáticamente con Hash Power. No es un token blockchain real, es un saldo interno convertible a criptomonedas reales.
-            </p>
-
-            <h3>Hash Power</h3>
-            <p>
-              El Hash Power determina tu velocidad de minado. Cada segundo ganas: Hash Power × 0.001 $KABUTO. Los planes VIP aumentan tu Hash Power permanentemente.
-            </p>
-
-            <h3>Sistema de niveles</h3>
-            <ul>
-              <li>Nivel 1 - Novato (0 H/s)</li>
-              <li>Nivel 2 - Aprendiz (10 H/s)</li>
-              <li>Nivel 3 - Minero (50 H/s)</li>
-              <li>Nivel 4 - Pro (200 H/s)</li>
-              <li>Nivel 5 - Experto (500 H/s)</li>
-              <li>Nivel 6 - Maestro (1500 H/s)</li>
-              <li>Nivel 7 - Leyenda (5000+ H/s)</li>
-            </ul>
-
-            <h3>Planes VIP</h3>
-            <p>Aumentan tu Hash Power permanentemente:</p>
-            <ul>
-              <li>VIP 1 - $1 → +50 H/s</li>
-              <li>VIP 2 - $5 → +200 H/s</li>
-              <li>VIP 3 - $10 → +500 H/s</li>
-              <li>VIP 4 - $25 → +1500 H/s</li>
-              <li>VIP 5 - $50 → +5000 H/s</li>
-            </ul>
-
-            <h3>Transparencia 30/70</h3>
-            <p>
-              De todos los ingresos: 70% se reserva para pagar retiros de usuarios, 30% para mantenimiento y ganancia del admin. Todos los pagos y retiros se publican en @kabuto_payments
-            </p>
-
-            <h3>Sistema de referidos</h3>
-            <ul>
-              <li>10% de comisión en cada compra VIP de tus referidos</li>
-              <li>5% de comisión de todo lo que minen tus referidos</li>
-            </ul>
-
-            <h3>Pagos y retiros</h3>
-            <p>
-              Procesados via Plisio en: USDT, TON, LTC, TRX, DOGE, BNB, SOL, USDC. Mínimo de retiro: $1.
-            </p>
-
-            <button onClick={() => setShowWhitepaper(false)}>Cerrar</button>
+      {activeTab !== 'whitepaper' && (
+        <nav className="bottom-nav">
+          <div className={activeTab === 'mina' ? 'nav-item active' : 'nav-item'} onClick={() => setActiveTab('mina')}>
+            <img src="/icon-mine.png" alt="Mina" className="nav-icon" onError={(e) => e.target.innerHTML='⛏️'} /><span>Mina</span>
           </div>
-        </div>
+          <div className={activeTab === 'tareas' ? 'nav-item active' : 'nav-item'} onClick={() => setActiveTab('tareas')}>
+            <img src="/icon-tasks.png" alt="Tareas" className="nav-icon" onError={(e) => e.target.innerHTML='📋'} /><span>Tareas</span>
+          </div>
+          <div className={activeTab === 'mejoras' ? 'nav-item active' : 'nav-item'} onClick={() => setActiveTab('mejoras')}>
+            <img src="/icon-shop.png" alt="Mejoras" className="nav-icon" onError={(e) => e.target.innerHTML='🛒'} /><span>Mineros</span>
+          </div>
+          <div className={activeTab === 'amigos' ? 'nav-item active' : 'nav-item'} onClick={() => setActiveTab('amigos')}>
+            <img src="/icon-friends.png" alt="Amigos" className="nav-icon" onError={(e) => e.target.innerHTML='👥'} /><span>Amigos</span>
+          </div>
+          <div className={activeTab === 'perfil' ? 'nav-item active' : 'nav-item'} onClick={() => setActiveTab('perfil')}>
+            <img src="/icon-profile.png" alt="Perfil" className="nav-icon" onError={(e) => e.target.innerHTML='👤'} /><span>Perfil</span>
+          </div>
+        </nav>
       )}
     </div>
   );
