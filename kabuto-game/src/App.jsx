@@ -452,10 +452,14 @@ function App() {
   ];
 
   const CURRENCIES = [
-    { code: 'USDT', icon: '🟢' }, { code: 'TON', icon: '💎' },
-    { code: 'LTC', icon: '🪙' }, { code: 'TRX', icon: '🔴' },
-    { code: 'DOGE', icon: '🐕' }, { code: 'BNB', icon: '🟡' },
-    { code: 'SOL', icon: '☀️' }, { code: 'USDC', icon: '🔵' }
+    { code: 'USDT', icon: '🟢', img: '/usdt.png' },
+    { code: 'TON', icon: '💎', img: '/ton.png' },
+    { code: 'LTC', icon: '🪙', img: '/ltc.png' },
+    { code: 'TRX', icon: '🔴', img: '/trx.png' },
+    { code: 'DOGE', icon: '🐕', img: '/doge.png' },
+    { code: 'BNB', icon: '🟡', img: '/bnb.png' },
+    { code: 'SOL', icon: '☀️', img: '/sol.png' },
+    { code: 'USDC', icon: '🔵', img: '/usdc.png' }
   ];
 
   // =====================================================
@@ -630,7 +634,8 @@ function App() {
             <div className="currency-grid">
               {CURRENCIES.map(c => (
                 <button key={c.code} className={`currency-btn ${selectedCurrency === c.code ? 'selected' : ''}`} onClick={() => setSelectedCurrency(c.code)}>
-                  <span className="currency-icon">{c.icon}</span>
+                  <img src={c.img} alt={c.code} className="currency-icon-img" onError={(e) => { e.target.style.display='none'; e.target.nextSibling.style.display='inline'; }} />
+                  <span className="currency-icon" style={{display:'none', fontSize:'24px'}}>{c.icon}</span>
                   <span className="currency-code">{c.code}</span>
                 </button>
               ))}
@@ -749,7 +754,8 @@ function App() {
                   <div className="currency-grid">
                     {CURRENCIES.map(c => (
                       <button key={c.code} className={`currency-btn ${withdrawCurrency === c.code ? 'selected' : ''}`} onClick={() => setWithdrawCurrency(c.code)}>
-                        <span className="currency-icon">{c.icon}</span>
+                        <img src={c.img} alt={c.code} className="currency-icon-img" onError={(e) => { e.target.style.display='none'; e.target.nextSibling.style.display='inline'; }} />
+                        <span className="currency-icon" style={{display:'none', fontSize:'24px'}}>{c.icon}</span>
                         <span className="currency-code">{c.code}</span>
                       </button>
                     ))}
