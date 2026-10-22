@@ -342,8 +342,22 @@ app.post('/api/create_invoice', async (req, res) => {
     });
   } catch (err) {
     console.error('❌ Error create_invoice:', err.response?.data || err.message);
+
+    // 🚀 FIX: Extraer el mensaje real de Plisio del error
+    let errorMsg = 'Error al crear factura';
+    if (err.response?.data) {
+      const plisioErr = err.response.data;
+      if (plisioErr.data?.message) {
+        errorMsg = plisioErr.data.message;
+      } else if (plisioErr.message) {
+        errorMsg = plisioErr.message;
+      }
+    } else if (err.message) {
+      errorMsg = err.message;
+    }
+
     res.status(500).json({
-      error: 'Error al crear factura: ' + (err.message || 'desconocido')
+      error: errorMsg
     });
   }
 });
