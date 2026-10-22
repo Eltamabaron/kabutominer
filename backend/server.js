@@ -30,8 +30,9 @@ const ADMIN_TELEGRAM_ID = '1159596878';
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
+// 🚀 FIX: Todos los planes ≥ $3 USD (mínimo de Plisio)
 const VIP_PLANS = {
-  1: { name: 'VIP 1', price: 1, hash_power: 50 },
+  1: { name: 'VIP 1', price: 3, hash_power: 50 },
   2: { name: 'VIP 2', price: 5, hash_power: 200 },
   3: { name: 'VIP 3', price: 10, hash_power: 500 },
   4: { name: 'VIP 4', price: 25, hash_power: 1500 },
@@ -286,7 +287,8 @@ app.post('/api/create_invoice', async (req, res) => {
     const orderNumber = `${telegram_id}_${plan_id}_${Date.now()}`;
     console.log('🛒 Creando factura en Plisio:', { plan: plan.name, currency: payCurrency, amount: plan.price });
 
-    const plisioResponse = await axios.post('https://plisio.net/api/v1/invoices/new', {
+    // 🚀 FIX: Plisio usa GET (no POST) y la URL correcta es api.plisio.net
+    const plisioParams = new URLSearchParams({
       source_currency: 'USD',
       source_amount: plan.price,
       currency: payCurrency,
@@ -295,10 +297,13 @@ app.post('/api/create_invoice', async (req, res) => {
       callback_url: 'https://kabutominer.onrender.com/api/plisio_webhook',
       success_callback_url: 'https://kabutominer.onrender.com/success',
       fail_callback_url: 'https://kabutominer.onrender.com/fail',
-    }, {
-      params: { api_key: PLISIO_API_KEY },
-      timeout: 30000
+      api_key: PLISIO_API_KEY
     });
+
+    const plisioResponse = await axios.get(
+      `https://api.plisio.net/api/v1/invoices/new?${plisioParams.toString()}`,
+      { timeout: 30000 }
+    );
 
     console.log('🛒 Respuesta Plisio:', plisioResponse.data.status, plisioResponse.data.message || '');
 
@@ -349,7 +354,7 @@ app.post('/api/create_invoice', async (req, res) => {
 app.get('/api/check_invoice/:tx_id', async (req, res) => {
   try {
     const response = await axios.get(
-      `https://plisio.net/api/v1/operations/${req.params.tx_id}`,
+      `https://api.plisio.net/api/v1/operations/${req.params.tx_id}`,
       { params: { api_key: PLISIO_API_KEY }, timeout: 15000 }
     );
 
@@ -555,14 +560,18 @@ app.post('/api/withdraw', async (req, res) => {
     if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
     if (user.balance < amount) return res.status(400).json({ error: 'Saldo insuficiente' });
 
-    const response = await axios.post('https://plisio.net/api/v1/withdraw', {
+    // 🚀 FIX: Plisio usa GET en todos los endpoints, URL correcta api.plisio.net
+    const withdrawParams = new URLSearchParams({
       currency: currency,
       amount: amount,
-      to: address
-    }, {
-      params: { api_key: PLISIO_API_KEY },
-      timeout: 30000
+      to: address,
+      api_key: PLISIO_API_KEY
     });
+
+    const response = await axios.get(
+      `https://api.plisio.net/api/v1/withdraw?${withdrawParams.toString()}`,
+      { timeout: 30000 }
+    );
 
     if (response.data.status !== 'success') {
       return res.status(400).json({ error: response.data.message || 'Error retiro' });

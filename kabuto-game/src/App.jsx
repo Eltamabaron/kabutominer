@@ -505,8 +505,9 @@ function App() {
   const activeVipReferrals = referrals.filter(r => r.is_vip === 1).length;
   const canWithdraw = user.is_vip === 1 && activeVipReferrals >= REQUIRED_VIP_REFERRALS;
 
+  // 🚀 FIX: VIP 1 ahora cuesta $3 (mínimo de Plisio)
   const realUpgrades = [
-    { id: 'real1', planId: 1, name: 'VIP 1 - Básico', cost_ton: 1, hashAdd: 50, image: '/vip-diamond.png' },
+    { id: 'real1', planId: 1, name: 'VIP 1 - Básico', cost_ton: 3, hashAdd: 50, image: '/vip-diamond.png' },
     { id: 'real2', planId: 2, name: 'VIP 2 - Pro', cost_ton: 5, hashAdd: 200, image: '/vip-dragon.png' },
     { id: 'real3', planId: 3, name: 'VIP 3 - Experto', cost_ton: 10, hashAdd: 500, image: '/vip-galaxy.png' },
     { id: 'real4', planId: 4, name: 'VIP 4 - Maestro', cost_ton: 25, hashAdd: 1500, image: '/vip-cosmic.png' },
