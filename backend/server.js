@@ -247,6 +247,9 @@ async function activateVIP(telegramId, planName, invoiceId) {
 
       // 🆕 Dar comisión al referente (10% de la compra)
       await givePurchaseCommission(telegramId, planName, plan.price);
+
+      // 🆕 Verificar logros después de compra VIP
+      await checkAchievements(telegramId);
     }
 
     await supabase
@@ -757,6 +760,9 @@ app.post('/api/daily_login', async (req, res) => {
       .eq('telegram_id', telegram_id);
 
     console.log(`📅 Login streak: ${telegram_id} día ${newStreak} (+${streakBonus} $KABUTO)`);
+
+    // 🆕 Verificar logros después de login
+    await checkAchievements(telegram_id);
 
     res.json({
       success: true,
@@ -1406,6 +1412,397 @@ app.post('/api/admin/remove_vip', async (req, res) => {
   } catch (err) {
     console.error('Error remove_vip:', err);
     res.status(500).json({ error: 'Error: ' + err.message });
+  }
+});
+
+// =====================================================
+// 🆕 API: COMPRAR BOOST TEMPORAL (con $KABUTO)
+// =====================================================
+const BOOST_TYPES = {
+  '2x_1h':   { name: '2x Minado 1h',  multiplier: 2, duration_hours: 1,  cost: 100 },
+  '2x_24h':  { name: '2x Minado 24h', multiplier: 2, duration_hours: 24, cost: 1000 },
+  '3x_1h':   { name: '3x Minado 1h',  multiplier: 3, duration_hours: 1,  cost: 250 },
+  'auto_24h':{ name: 'Auto-Minero 24h', multiplier: 1, duration_hours: 24, cost: 500, auto_mine: true }
+};
+
+app.post('/api/buy_boost', async (req, res) => {
+  try {
+    const { telegram_id, boost_type } = req.body;
+    const boost = BOOST_TYPES[boost_type];
+    if (!boost) return res.status(400).json({ error: 'Boost inválido' });
+
+    const { data: user } = await supabase
+      .from('users')
+      .select('*')
+      .eq('telegram_id', telegram_id)
+      .single();
+    if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
+
+    if ((user.balance || 0) < boost.cost) {
+      return res.status(400).json({ error: `Necesitas ${boost.cost} $KABUTO` });
+    }
+
+    // Restar balance
+    const newBalance = (user.balance || 0) - boost.cost;
+    await supabase.from('users')
+      .update({ balance: newBalance })
+      .eq('telegram_id', telegram_id);
+
+    // Crear boost activo
+    const expiresAt = new Date();
+    expiresAt.setHours(expiresAt.getHours() + boost.duration_hours);
+
+    await supabase.from('active_boosts').insert([{
+      telegram_id: telegram_id,
+      boost_type: boost_type,
+      multiplier: boost.multiplier,
+      expires_at: expiresAt.toISOString()
+    }]);
+
+    console.log(`🚀 Boost activado: ${telegram_id} → ${boost.name}`);
+
+    res.json({
+      success: true,
+      boost: boost,
+      expires_at: expiresAt.toISOString(),
+      new_balance: newBalance
+    });
+  } catch (err) {
+    console.error('Error buy_boost:', err);
+    res.status(500).json({ error: 'Error' });
+  }
+});
+
+// =====================================================
+// 🆕 API: OBTENER BOOSTS ACTIVOS DEL USUARIO
+// =====================================================
+app.get('/api/boosts/:telegram_id', async (req, res) => {
+  try {
+    const now = new Date().toISOString();
+    const { data: boosts } = await supabase
+      .from('active_boosts')
+      .select('*')
+      .eq('telegram_id', req.params.telegram_id)
+      .gt('expires_at', now)
+      .order('expires_at', { ascending: true });
+
+    // Calcular multiplicador total
+    let totalMultiplier = 1;
+    (boosts || []).forEach(b => {
+      totalMultiplier *= (b.multiplier || 1);
+    });
+
+    res.json({
+      success: true,
+      active_boosts: boosts || [],
+      total_multiplier: totalMultiplier
+    });
+  } catch (err) {
+    res.json({ success: true, active_boosts: [], total_multiplier: 1 });
+  }
+});
+
+// =====================================================
+// 🆕 API: OBTENER LOGROS
+// =====================================================
+app.get('/api/achievements/:telegram_id', async (req, res) => {
+  try {
+    const { data: all } = await supabase.from('achievements').select('*');
+    const { data: unlocked } = await supabase
+      .from('user_achievements')
+      .select('achievement_code, unlocked_at')
+      .eq('telegram_id', req.params.telegram_id);
+
+    const unlockedCodes = (unlocked || []).map(u => u.achievement_code);
+
+    res.json({
+      success: true,
+      achievements: (all || []).map(a => ({
+        ...a,
+        unlocked: unlockedCodes.includes(a.code),
+        unlocked_at: unlocked?.find(u => u.achievement_code === a.code)?.unlocked_at || null
+      })),
+      total: all?.length || 0,
+      unlocked_count: unlockedCodes.length
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Error' });
+  }
+});
+
+// =====================================================
+// 🆕 FUNCIÓN: Verificar y desbloquear logros
+// =====================================================
+async function checkAchievements(telegramId) {
+  try {
+    const { data: user } = await supabase
+      .from('users')
+      .select('*')
+      .eq('telegram_id', telegramId)
+      .single();
+    if (!user) return [];
+
+    const { data: existing } = await supabase
+      .from('user_achievements')
+      .select('achievement_code')
+      .eq('telegram_id', telegramId);
+    const existingCodes = (existing || []).map(e => e.achievement_code);
+
+    const { data: referrals } = await supabase
+      .from('referrals')
+      .select('referred_id')
+      .eq('referrer_id', telegramId);
+
+    const { data: vipReferrals } = await supabase
+      .from('referrals')
+      .select(`
+        referred_id,
+        users!referrals_referred_id_fkey(vip_level)
+      `)
+      .eq('referrer_id', telegramId);
+
+    const activeVipCount = (vipReferrals || []).filter(r => r.users?.[0]?.vip_level > 0).length;
+
+    const newAchievements = [];
+
+    const checks = [
+      { code: 'first_login', condition: true },
+      { code: 'first_vip', condition: user.vip_level > 0 },
+      { code: 'vip_max', condition: user.vip_level >= 5 },
+      { code: 'first_referral', condition: (referrals?.length || 0) >= 1 },
+      { code: 'ten_referrals', condition: (referrals?.length || 0) >= 10 },
+      { code: 'six_vip_referrals', condition: activeVipCount >= 6 },
+      { code: 'level_5', condition: user.hash_power >= 200 },
+      { code: 'level_7', condition: user.hash_power >= 5000 },
+      { code: 'big_miner', condition: (user.total_mined || 0) >= 1000 },
+      { code: 'streak_7', condition: (user.last_login_streak || 0) >= 7 }
+    ];
+
+    for (const check of checks) {
+      if (check.condition && !existingCodes.includes(check.code)) {
+        const { data: ach } = await supabase
+          .from('achievements')
+          .select('*')
+          .eq('code', check.code)
+          .single();
+
+        if (ach) {
+          await supabase.from('user_achievements').insert([{
+            telegram_id: telegramId,
+            achievement_code: check.code
+          }]);
+
+          // Dar recompensa
+          const newBalance = (user.balance || 0) + (ach.reward || 0);
+          await supabase.from('users')
+            .update({ balance: newBalance })
+            .eq('telegram_id', telegramId);
+
+          newAchievements.push({
+            code: ach.code,
+            name: ach.name,
+            icon: ach.icon,
+            reward: ach.reward
+          });
+
+          console.log(`🏆 Logro desbloqueado: ${telegramId} → ${ach.name}`);
+
+          // Notificar via bot
+          try {
+            const bot = require('./bot');
+            if (bot.bot) {
+              await bot.bot.sendMessage(telegramId,
+                `🏆 *¡Logro Desbloqueado!*\n\n${ach.icon} *${ach.name}*\n${ach.description}\n\n💰 Recompensa: +${ach.reward} $KABUTO`,
+                { parse_mode: 'Markdown' }
+              );
+            }
+          } catch (e) {}
+        }
+      }
+    }
+
+    return newAchievements;
+  } catch (err) {
+    console.error('Error checkAchievements:', err);
+    return [];
+  }
+}
+
+// =====================================================
+// 🆕 API: VERIFICAR LOGROS (llamar después de acciones)
+// =====================================================
+app.post('/api/check_achievements', async (req, res) => {
+  try {
+    const { telegram_id } = req.body;
+    const newAchievements = await checkAchievements(telegram_id);
+    res.json({ success: true, new_achievements: newAchievements });
+  } catch (err) {
+    res.status(500).json({ error: 'Error' });
+  }
+});
+
+// =====================================================
+// 🆕 API: RANKING (TOP 10)
+// =====================================================
+app.get('/api/leaderboard', async (req, res) => {
+  try {
+    const type = req.query.type || 'balance'; // balance, hash_power, total_mined
+    const validTypes = ['balance', 'hash_power', 'total_mined'];
+    if (!validTypes.includes(type)) {
+      return res.status(400).json({ error: 'Tipo inválido' });
+    }
+
+    const { data: top } = await supabase
+      .from('users')
+      .select(`telegram_id, first_name, username, ${type}, vip_level, banned`)
+      .order(type, { ascending: false })
+      .limit(10);
+
+    res.json({
+      success: true,
+      type: type,
+      leaderboard: (top || []).map((u, i) => ({
+        rank: i + 1,
+        telegram_id: u.telegram_id,
+        name: u.first_name || 'Anónimo',
+        username: u.username || '',
+        value: u[type],
+        vip_level: u.vip_level || 0,
+        banned: u.banned || 0
+      }))
+    });
+  } catch (err) {
+    console.error('Error leaderboard:', err);
+    res.status(500).json({ error: 'Error' });
+  }
+});
+
+// =====================================================
+// 🆕 API: ADMIN - BUSCAR USUARIOS
+// =====================================================
+app.get('/api/admin/search', async (req, res) => {
+  try {
+    const { admin_id, q } = req.query;
+    if (admin_id !== ADMIN_TELEGRAM_ID) {
+      return res.status(403).json({ error: 'No autorizado' });
+    }
+    if (!q || q.length < 1) {
+      return res.json({ success: true, users: [] });
+    }
+
+    const { data: users } = await supabase
+      .from('users')
+      .select('*')
+      .or(`telegram_id.ilike.%${q}%,username.ilike.%${q}%,first_name.ilike.%${q}%`)
+      .limit(20);
+
+    res.json({ success: true, users: users || [] });
+  } catch (err) {
+    console.error('Error admin search:', err);
+    res.status(500).json({ error: 'Error' });
+  }
+});
+
+// =====================================================
+// 🆕 API: ADMIN - MENSAJE MASIVO
+// =====================================================
+app.post('/api/admin/broadcast', async (req, res) => {
+  try {
+    const { admin_id, message } = req.body;
+    if (admin_id !== ADMIN_TELEGRAM_ID) {
+      return res.status(403).json({ error: 'No autorizado' });
+    }
+    if (!message) return res.status(400).json({ error: 'Mensaje requerido' });
+
+    const { data: users } = await supabase
+      .from('users')
+      .select('telegram_id, banned')
+      .eq('banned', 0);
+
+    let sent = 0;
+    let failed = 0;
+
+    try {
+      const bot = require('./bot');
+      if (bot.bot) {
+        for (const u of (users || [])) {
+          try {
+            await bot.bot.sendMessage(u.telegram_id,
+              `📢 *Mensaje de Kabuto Miner*\n\n${message}`,
+              { parse_mode: 'Markdown' }
+            );
+            sent++;
+            // Pequeña pausa para no saturar
+            await new Promise(r => setTimeout(r, 50));
+          } catch (e) {
+            failed++;
+          }
+        }
+      } else {
+        return res.status(500).json({ error: 'Bot no disponible' });
+      }
+    } catch (e) {
+      return res.status(500).json({ error: 'Error enviando: ' + e.message });
+    }
+
+    res.json({ success: true, sent, failed, total: (users || []).length });
+  } catch (err) {
+    console.error('Error broadcast:', err);
+    res.status(500).json({ error: 'Error' });
+  }
+});
+
+// =====================================================
+// 🆕 API: ADMIN - STATS DETALLADAS CON GRÁFICOS
+// =====================================================
+app.get('/api/admin/chart_data', async (req, res) => {
+  try {
+    const { admin_id } = req.query;
+    if (admin_id !== ADMIN_TELEGRAM_ID) {
+      return res.status(403).json({ error: 'No autorizado' });
+    }
+
+    // Compras por día (últimos 7 días)
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+    const { data: purchases } = await supabase
+      .from('purchases')
+      .select('amount_usd, created_at')
+      .eq('status', 'completed')
+      .gte('created_at', sevenDaysAgo.toISOString());
+
+    const { data: withdrawals } = await supabase
+      .from('withdrawals')
+      .select('amount, created_at')
+      .gte('created_at', sevenDaysAgo.toISOString());
+
+    // Agrupar por día
+    const days = {};
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const key = d.toISOString().split('T')[0];
+      days[key] = { date: key, income: 0, withdrawals: 0 };
+    }
+
+    (purchases || []).forEach(p => {
+      const key = new Date(p.created_at).toISOString().split('T')[0];
+      if (days[key]) days[key].income += p.amount_usd;
+    });
+
+    (withdrawals || []).forEach(w => {
+      const key = new Date(w.created_at).toISOString().split('T')[0];
+      if (days[key]) days[key].withdrawals += w.amount;
+    });
+
+    res.json({
+      success: true,
+      chart_data: Object.values(days)
+    });
+  } catch (err) {
+    console.error('Error chart data:', err);
+    res.status(500).json({ error: 'Error' });
   }
 });
 

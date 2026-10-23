@@ -27,6 +27,19 @@ function App() {
   const [rouletteStatus, setRouletteStatus] = useState({ can_spin: true, history: [] });
   const [spinning, setSpinning] = useState(false);
   const [rouletteResult, setRouletteResult] = useState(null);
+
+  // 🆕 PASO 6
+  const [activeBoosts, setActiveBoosts] = useState([]);
+  const [boostMultiplier, setBoostMultiplier] = useState(1);
+  const [achievements, setAchievements] = useState([]);
+  const [leaderboard, setLeaderboard] = useState([]);
+  const [leaderboardType, setLeaderboardType] = useState('balance');
+  const [adminSearch, setAdminSearch] = useState('');
+  const [adminSearchResults, setAdminSearchResults] = useState([]);
+  const [broadcastMessage, setBroadcastMessage] = useState('');
+  const [broadcasting, setBroadcasting] = useState(false);
+  const [showBroadcast, setShowBroadcast] = useState(false);
+  const [chartData, setChartData] = useState([]);
   const [adminStats, setAdminStats] = useState(null);
   const [adminUsers, setAdminUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -158,6 +171,9 @@ function App() {
           loadReferrals(data.telegram_id);
           loadLoginStreak(data.telegram_id);
           loadRouletteStatus(data.telegram_id);
+          loadBoosts(data.telegram_id);
+          loadAchievements(data.telegram_id);
+          loadLeaderboard();
         }
       } catch (err) {
         console.error('Error login:', err);
@@ -333,6 +349,148 @@ function App() {
   }
 
   // =====================================================
+  // 🆕 CARGAR BOOSTS ACTIVOS
+  // =====================================================
+  async function loadBoosts(telegramId) {
+    try {
+      const r = await fetch(`${API_URL}/api/boosts/${telegramId}`);
+      const data = await r.json();
+      if (data.success) {
+        setActiveBoosts(data.active_boosts || []);
+        setBoostMultiplier(data.total_multiplier || 1);
+      }
+    } catch (err) {
+      console.error('Error cargar boosts:', err);
+    }
+  }
+
+  // =====================================================
+  // 🆕 COMPRAR BOOST
+  // =====================================================
+  async function handleBuyBoost(boostType, cost, name) {
+    if (holdingWallet < cost) {
+      showModal('Saldo Insuficiente', `Necesitas ${cost} $KABUTO para comprar ${name}`, 'error');
+      return;
+    }
+    if (!confirm(`¿Comprar ${name} por ${cost} $KABUTO?`)) return;
+    try {
+      const r = await fetch(`${API_URL}/api/buy_boost`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ telegram_id: user.telegram_id, boost_type: boostType })
+      });
+      const data = await r.json();
+      if (data.success) {
+        setHoldingWallet(data.new_balance);
+        await loadBoosts(user.telegram_id);
+        showModal('🚀 Boost Activado!', `${data.boost.name}\n\nVence: ${new Date(data.expires_at).toLocaleString('es-ES')}`);
+      } else {
+        showModal('Error', data.error, 'error');
+      }
+    } catch (err) {
+      console.error('Error buy boost:', err);
+      showModal('Error', 'No se pudo conectar', 'error');
+    }
+  }
+
+  // =====================================================
+  // 🆕 CARGAR LOGROS
+  // =====================================================
+  async function loadAchievements(telegramId) {
+    try {
+      const r = await fetch(`${API_URL}/api/achievements/${telegramId}`);
+      const data = await r.json();
+      if (data.success) {
+        setAchievements(data.achievements || []);
+      }
+    } catch (err) {
+      console.error('Error cargar logros:', err);
+    }
+  }
+
+  // =====================================================
+  // 🆕 CARGAR RANKING
+  // =====================================================
+  async function loadLeaderboard(type = leaderboardType) {
+    try {
+      const r = await fetch(`${API_URL}/api/leaderboard?type=${type}`);
+      const data = await r.json();
+      if (data.success) {
+        setLeaderboard(data.leaderboard || []);
+      }
+    } catch (err) {
+      console.error('Error cargar ranking:', err);
+    }
+  }
+
+  // =====================================================
+  // 🆕 ADMIN: BUSCAR USUARIOS
+  // =====================================================
+  async function handleAdminSearch(query) {
+    setAdminSearch(query);
+    if (query.length < 1) {
+      setAdminSearchResults([]);
+      return;
+    }
+    try {
+      const r = await fetch(`${API_URL}/api/admin/search?admin_id=${user.telegram_id}&q=${encodeURIComponent(query)}`);
+      const data = await r.json();
+      if (data.success) {
+        setAdminSearchResults(data.users || []);
+      }
+    } catch (err) {
+      console.error('Error search:', err);
+    }
+  }
+
+  // =====================================================
+  // 🆕 ADMIN: ENVIAR MENSAJE MASIVO
+  // =====================================================
+  async function handleBroadcast() {
+    if (!broadcastMessage.trim()) {
+      showModal('Error', 'Escribe un mensaje', 'error');
+      return;
+    }
+    if (!confirm(`¿Enviar mensaje a TODOS los usuarios?\n\nEsto puede tardar varios minutos.`)) return;
+    setBroadcasting(true);
+    try {
+      const r = await fetch(`${API_URL}/api/admin/broadcast`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ admin_id: user.telegram_id, message: broadcastMessage })
+      });
+      const data = await r.json();
+      if (data.success) {
+        showModal('✅ Mensaje Enviado', `Enviados: ${data.sent}\nFallidos: ${data.failed}\nTotal: ${data.total}`);
+        setShowBroadcast(false);
+        setBroadcastMessage('');
+      } else {
+        showModal('Error', data.error, 'error');
+      }
+    } catch (err) {
+      console.error('Error broadcast:', err);
+      showModal('Error', 'No se pudo enviar', 'error');
+    } finally {
+      setBroadcasting(false);
+    }
+  }
+
+  // =====================================================
+  // 🆕 ADMIN: CARGAR DATOS DE GRÁFICO
+  // =====================================================
+  async function loadChartData() {
+    try {
+      const r = await fetch(`${API_URL}/api/admin/chart_data?admin_id=${user.telegram_id}`);
+      const data = await r.json();
+      if (data.success) {
+        setChartData(data.chart_data || []);
+      }
+    } catch (err) {
+      console.error('Error chart:', err);
+    }
+  }
+
+  // =====================================================
   // GUARDAR PROGRESO
   // =====================================================
   useEffect(() => {
@@ -362,10 +520,20 @@ function App() {
   useEffect(() => {
     if (!user.telegram_id || (isAdmin && adminView)) return;
     const interval = setInterval(() => {
-      setPoolWallet(prev => prev + (hashPower * MINING_MULTIPLIER));
+      // 🆕 Aplicar multiplicador de boosts
+      setPoolWallet(prev => prev + (hashPower * MINING_MULTIPLIER * boostMultiplier));
     }, 1000);
-    return () => clearInterval(interval);
-  }, [hashPower, user.telegram_id, isAdmin, adminView]);
+
+    // 🆕 Recargar boosts cada 30s (por si vencen)
+    const boostInterval = setInterval(() => {
+      loadBoosts(user.telegram_id);
+    }, 30000);
+
+    return () => {
+      clearInterval(interval);
+      clearInterval(boostInterval);
+    };
+  }, [hashPower, user.telegram_id, isAdmin, adminView, boostMultiplier]);
 
   // =====================================================
   // CARGAR STATS ADMIN
@@ -727,6 +895,108 @@ function App() {
             <div className="admin-stat-card"><span>💸 Retiros</span><strong>{adminStats?.withdrawals?.length || 0}</strong></div>
           </div>
 
+          {/* 🆕 GRÁFICO DE INGRESOS/RETIROS */}
+          <div className="admin-section-title">📊 Gráfico (7 días)</div>
+          <div className="admin-chart-container">
+            <button onClick={loadChartData} className="buy-btn" style={{marginBottom: '10px', width: 'auto'}}>📈 Cargar gráfico</button>
+            {chartData.length > 0 && (
+              <div className="admin-chart">
+                {chartData.map((d, i) => {
+                  const maxIncome = Math.max(...chartData.map(x => Math.max(x.income, x.withdrawals)), 1);
+                  const incH = (d.income / maxIncome) * 100;
+                  const wdH = (d.withdrawals / maxIncome) * 100;
+                  return (
+                    <div key={i} className="chart-bar-group">
+                      <div className="chart-bars">
+                        <div className="chart-bar income" style={{height: `${incH}%`}} title={`Ingresos: $${d.income.toFixed(2)}`}></div>
+                        <div className="chart-bar withdrawal" style={{height: `${wdH}%`}} title={`Retiros: $${d.withdrawals.toFixed(2)}`}></div>
+                      </div>
+                      <small>{d.date.split('-')[2]}</small>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            <div className="chart-legend">
+              <span className="legend-item"><span className="legend-color income"></span>Ingresos</span>
+              <span className="legend-item"><span className="legend-color withdrawal"></span>Retiros</span>
+            </div>
+          </div>
+
+          {/* 🆕 MENSAJE MASIVO */}
+          <div className="admin-section-title">📢 Mensaje Masivo</div>
+          {!showBroadcast ? (
+            <button className="claim-btn vip-btn" onClick={() => setShowBroadcast(true)} style={{marginBottom: '20px', padding: '10px'}}>
+              📢 ENVIAR MENSAJE A TODOS
+            </button>
+          ) : (
+            <div className="broadcast-box">
+              <textarea
+                placeholder="Escribe tu mensaje aquí..."
+                value={broadcastMessage}
+                onChange={(e) => setBroadcastMessage(e.target.value)}
+                rows={4}
+                className="ref-input"
+                style={{width: '100%', marginBottom: '10px', resize: 'vertical'}}
+              />
+              <div style={{display: 'flex', gap: '10px'}}>
+                <button className="claim-btn vip-btn" onClick={handleBroadcast} disabled={broadcasting} style={{flex: 1, padding: '10px'}}>
+                  {broadcasting ? 'Enviando...' : '✅ ENVIAR'}
+                </button>
+                <button className="claim-btn" onClick={() => setShowBroadcast(false)} style={{flex: 1, padding: '10px', background: '#555'}}>
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* 🆕 BÚSQUEDA DE USUARIOS */}
+          <div className="admin-section-title">🔍 Buscar Usuario</div>
+          <input
+            type="text"
+            placeholder="Nombre, username o ID..."
+            value={adminSearch}
+            onChange={(e) => handleAdminSearch(e.target.value)}
+            className="ref-input"
+            style={{width: '100%', marginBottom: '10px'}}
+          />
+          {adminSearchResults.length > 0 && (
+            <div className="admin-users-list">
+              {adminSearchResults.map(u => (
+                <div key={u.telegram_id} className={`admin-user-card ${u.banned ? 'banned' : ''}`}>
+                  <div className="admin-user-info">
+                    <strong>{u.first_name} {u.vip_level > 0 ? '👑' : ''} {u.banned ? '🚫' : ''}</strong>
+                    <span className="user-id-text">ID: {u.telegram_id}</span>
+                    <span className="user-finances">Balance: ${Number(u.balance || 0).toFixed(2)} | VIP: {u.vip_level} | HP: {u.hash_power}</span>
+                  </div>
+                  <div className="admin-user-actions">
+                    {u.vip_level > 0 ? (
+                      <button className="ban-btn unban" onClick={() => removeVipManual(u.telegram_id)}>Quitar VIP</button>
+                    ) : (
+                      <select
+                        onChange={(e) => { if (e.target.value) activateVipManual(u.telegram_id, e.target.value); e.target.value=''; }}
+                        defaultValue=""
+                        style={{background:'#21262d',color:'#fff',border:'1px solid #30363d',borderRadius:'4px',padding:'4px 8px',fontSize:'12px'}}
+                      >
+                        <option value="">+ VIP</option>
+                        <option value="1">VIP 1</option>
+                        <option value="2">VIP 2</option>
+                        <option value="3">VIP 3</option>
+                        <option value="4">VIP 4</option>
+                        <option value="5">VIP 5</option>
+                      </select>
+                    )}
+                    {u.telegram_id !== ADMIN_ID && (
+                      <button className={`ban-btn ${u.banned ? 'unban' : ''}`} onClick={() => handleBanUser(u.telegram_id, u.banned)}>
+                        {u.banned ? 'Desbloquear' : 'Bloquear'}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
           <div className="admin-section-title">Usuarios ({adminUsers.length})</div>
           <div className="admin-users-list">
             {adminUsers.length === 0 ? (
@@ -899,6 +1169,59 @@ function App() {
               </button>
             </div>
           ))}
+
+          {/* 🆕 BOOSTS TEMPORALES */}
+          <div className="divider"></div>
+          <h2 className="shop-title">🚀 BOOSTS TEMPORALES</h2>
+          <p className="shop-subtitle">Mina más rápido temporalmente con $KABUTO</p>
+
+          {/* Boosts activos */}
+          {activeBoosts.length > 0 && (
+            <div className="active-boosts-banner">
+              <strong>⚡ Boosts activos (x{boostMultiplier})</strong>
+              {activeBoosts.map((b, i) => (
+                <div key={i} className="active-boost-item">
+                  {b.boost_type === '2x_1h' && '2x Minado 1h'}
+                  {b.boost_type === '2x_24h' && '2x Minado 24h'}
+                  {b.boost_type === '3x_1h' && '3x Minado 1h'}
+                  {b.boost_type === 'auto_24h' && 'Auto-Minero 24h'}
+                  {' → '}vence {new Date(b.expires_at).toLocaleTimeString('es-ES', {hour: '2-digit', minute: '2-digit'})}
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="upgrade-card boost-card">
+            <div className="upgrade-info">
+              <span className="upgrade-emoji">⚡</span>
+              <div><strong>2x Minado 1h</strong><span className="upgrade-profit">Doble velocidad por 1 hora</span></div>
+            </div>
+            <button className="buy-btn" onClick={() => handleBuyBoost('2x_1h', 100, '2x Minado 1h')}>100</button>
+          </div>
+
+          <div className="upgrade-card boost-card">
+            <div className="upgrade-info">
+              <span className="upgrade-emoji">🚀</span>
+              <div><strong>3x Minado 1h</strong><span className="upgrade-profit">Triple velocidad por 1 hora</span></div>
+            </div>
+            <button className="buy-btn" onClick={() => handleBuyBoost('3x_1h', 250, '3x Minado 1h')}>250</button>
+          </div>
+
+          <div className="upgrade-card boost-card">
+            <div className="upgrade-info">
+              <span className="upgrade-emoji">⏰</span>
+              <div><strong>2x Minado 24h</strong><span className="upgrade-profit">Doble velocidad por 24 horas</span></div>
+            </div>
+            <button className="buy-btn" onClick={() => handleBuyBoost('2x_24h', 1000, '2x Minado 24h')}>1000</button>
+          </div>
+
+          <div className="upgrade-card boost-card">
+            <div className="upgrade-info">
+              <span className="upgrade-emoji">🤖</span>
+              <div><strong>Auto-Minero 24h</strong><span className="upgrade-profit">Mina solo aunque no entres</span></div>
+            </div>
+            <button className="buy-btn" onClick={() => handleBuyBoost('auto_24h', 500, 'Auto-Minero 24h')}>500</button>
+          </div>
         </div>
       )}
 
@@ -1071,6 +1394,53 @@ function App() {
             <div className="stat-item"><span className="stat-label">👑 Nivel VIP</span><strong className="stat-value">{user.vip_level}</strong></div>
             <div className="stat-item"><span className="stat-label">⛏️ Total Minado</span><strong className="stat-value">{user.total_mined.toFixed(2)}</strong></div>
           </div>
+
+          {/* 🆕 LOGROS */}
+          <div className="achievements-section">
+            <h3 className="achievements-title">🏆 LOGROS ({achievements.filter(a => a.unlocked).length}/{achievements.length})</h3>
+            <div className="achievements-grid">
+              {achievements.map(ach => (
+                <div key={ach.code} className={`achievement-badge ${ach.unlocked ? 'unlocked' : 'locked'}`}>
+                  <span className="achievement-icon">{ach.icon}</span>
+                  <div className="achievement-info">
+                    <strong>{ach.name}</strong>
+                    <small>{ach.description}</small>
+                    {ach.unlocked ? (
+                      <span className="achievement-reward">+{ach.reward} ✅</span>
+                    ) : (
+                      <span className="achievement-reward locked">+{ach.reward} 🔒</span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* 🆕 RANKING */}
+          <div className="leaderboard-section">
+            <h3 className="leaderboard-title">🏅 RANKING TOP 10</h3>
+            <div className="leaderboard-tabs">
+              <button className={leaderboardType === 'balance' ? 'active' : ''} onClick={() => { setLeaderboardType('balance'); loadLeaderboard('balance'); }}>💰 Balance</button>
+              <button className={leaderboardType === 'hash_power' ? 'active' : ''} onClick={() => { setLeaderboardType('hash_power'); loadLeaderboard('hash_power'); }}>⚡ Hash Power</button>
+              <button className={leaderboardType === 'total_mined' ? 'active' : ''} onClick={() => { setLeaderboardType('total_mined'); loadLeaderboard('total_mined'); }}>⛏️ Total Minado</button>
+            </div>
+            <div className="leaderboard-list">
+              {leaderboard.length === 0 ? (
+                <p className="no-friends">Aún no hay datos para el ranking</p>
+              ) : leaderboard.map((u, i) => (
+                <div key={u.telegram_id} className={`leaderboard-row ${u.telegram_id === user.telegram_id ? 'me' : ''} rank-${u.rank}`}>
+                  <span className="rank-badge">{u.rank === 1 ? '🥇' : u.rank === 2 ? '🥈' : u.rank === 3 ? '🥉' : `#${u.rank}`}</span>
+                  <span className="rank-name">{u.name} {u.vip_level > 0 ? '👑' : ''} {u.telegram_id === user.telegram_id ? '(Tú)' : ''}</span>
+                  <span className="rank-value">
+                    {leaderboardType === 'balance' && `$${Number(u.value || 0).toFixed(2)}`}
+                    {leaderboardType === 'hash_power' && `${u.value} H/s`}
+                    {leaderboardType === 'total_mined' && `${Number(u.value || 0).toFixed(2)}`}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+
           <div className="wallet-section transparent-section" onClick={openPaymentsChannel} style={{cursor: 'pointer'}}>
             <h3>🛡️ CANAL DE TRANSPARENCIA</h3>
             <p>Verifica todos los pagos reales de la plataforma en tiempo real.</p>

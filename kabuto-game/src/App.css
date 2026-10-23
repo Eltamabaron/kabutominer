@@ -1597,3 +1597,314 @@ body {
     font-size: 50px;
   }
 }
+/* =====================================================
+   ESTILOS: BOOSTS + LOGROS + RANKING + ADMIN MEJORADO
+   =====================================================
+   Agregar al final de App.css
+   ===================================================== */
+
+/* ============== BOOSTS TEMPORALES ============== */
+.boost-card {
+  border-color: #ff9800 !important;
+  background: rgba(255, 152, 0, 0.05) !important;
+}
+
+.boost-card .buy-btn {
+  background: #ff9800 !important;
+  color: #fff !important;
+}
+
+.active-boosts-banner {
+  background: linear-gradient(135deg, rgba(255, 152, 0, 0.2) 0%, rgba(20, 20, 20, 0.8) 100%);
+  border: 1px solid #ff9800;
+  border-radius: 10px;
+  padding: 12px 15px;
+  margin-bottom: 15px;
+}
+
+.active-boosts-banner strong {
+  color: #ff9800;
+  display: block;
+  margin-bottom: 8px;
+  font-size: 14px;
+}
+
+.active-boost-item {
+  font-size: 12px;
+  color: #fff;
+  margin-top: 4px;
+}
+
+/* ============== LOGROS ============== */
+.achievements-section {
+  margin-bottom: 30px;
+  width: 100%;
+}
+
+.achievements-title {
+  color: #ffd700;
+  font-size: 16px;
+  margin-bottom: 15px;
+  text-align: center;
+}
+
+.achievements-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.achievement-badge {
+  background: rgba(20, 20, 20, 0.8);
+  border: 1px solid #333;
+  border-radius: 10px;
+  padding: 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.achievement-badge.unlocked {
+  border-color: #ffd700;
+  background: rgba(255, 215, 0, 0.05);
+  box-shadow: 0 0 10px rgba(255, 215, 0, 0.1);
+}
+
+.achievement-badge.locked {
+  opacity: 0.5;
+}
+
+.achievement-icon {
+  font-size: 30px;
+  flex-shrink: 0;
+}
+
+.achievement-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.achievement-info strong {
+  font-size: 12px;
+  color: #fff;
+}
+
+.achievement-info small {
+  font-size: 10px;
+  color: #888;
+}
+
+.achievement-reward {
+  font-size: 10px;
+  color: #4caf50;
+  font-weight: bold;
+  margin-top: 2px;
+}
+
+.achievement-reward.locked {
+  color: #555;
+}
+
+/* ============== RANKING ============== */
+.leaderboard-section {
+  width: 100%;
+  margin-bottom: 30px;
+}
+
+.leaderboard-title {
+  color: #ffd700;
+  font-size: 16px;
+  margin-bottom: 15px;
+  text-align: center;
+}
+
+.leaderboard-tabs {
+  display: flex;
+  gap: 5px;
+  margin-bottom: 15px;
+  justify-content: center;
+}
+
+.leaderboard-tabs button {
+  background: rgba(20, 20, 20, 0.8);
+  border: 1px solid #333;
+  color: #888;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.leaderboard-tabs button.active {
+  background: #ffd700;
+  color: #000;
+  border-color: #ffd700;
+}
+
+.leaderboard-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.leaderboard-row {
+  background: rgba(20, 20, 20, 0.8);
+  border: 1px solid #333;
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.leaderboard-row.me {
+  border-color: #4caf50;
+  background: rgba(76, 175, 80, 0.1);
+}
+
+.leaderboard-row.rank-1 {
+  border-color: #ffd700;
+  background: rgba(255, 215, 0, 0.1);
+}
+
+.leaderboard-row.rank-2 {
+  border-color: #c0c0c0;
+  background: rgba(192, 192, 192, 0.05);
+}
+
+.leaderboard-row.rank-3 {
+  border-color: #cd7f32;
+  background: rgba(205, 127, 50, 0.05);
+}
+
+.rank-badge {
+  font-size: 18px;
+  width: 30px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.rank-name {
+  flex: 1;
+  font-size: 13px;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.rank-value {
+  font-size: 12px;
+  color: #ffd700;
+  font-weight: bold;
+}
+
+/* ============== ADMIN: GRÁFICO ============== */
+.admin-chart-container {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid #333;
+  border-radius: 10px;
+  padding: 15px;
+  margin-bottom: 20px;
+}
+
+.admin-chart {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-around;
+  height: 150px;
+  gap: 5px;
+  padding: 10px 0;
+}
+
+.chart-bar-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  flex: 1;
+  height: 100%;
+}
+
+.chart-bars {
+  display: flex;
+  gap: 2px;
+  align-items: flex-end;
+  height: 100%;
+  width: 100%;
+  justify-content: center;
+}
+
+.chart-bar {
+  width: 12px;
+  min-height: 2px;
+  border-radius: 3px 3px 0 0;
+  transition: height 0.3s ease;
+}
+
+.chart-bar.income {
+  background: #4caf50;
+}
+
+.chart-bar.withdrawal {
+  background: #f44336;
+}
+
+.chart-bar-group small {
+  font-size: 10px;
+  color: #888;
+}
+
+.chart-legend {
+  display: flex;
+  justify-content: center;
+  gap: 20px;
+  margin-top: 10px;
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: #aaa;
+}
+
+.legend-color {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+}
+
+.legend-color.income {
+  background: #4caf50;
+}
+
+.legend-color.withdrawal {
+  background: #f44336;
+}
+
+/* ============== ADMIN: BROADCAST ============== */
+.broadcast-box {
+  background: rgba(0, 168, 255, 0.05);
+  border: 1px solid #00a8ff;
+  border-radius: 10px;
+  padding: 15px;
+  margin-bottom: 20px;
+}
+
+/* ============== RESPONSIVE ============== */
+@media (max-width: 380px) {
+  .achievements-grid {
+    grid-template-columns: 1fr;
+  }
+  .admin-chart {
+    height: 100px;
+  }
+  .chart-bar {
+    width: 8px;
+  }
+}
