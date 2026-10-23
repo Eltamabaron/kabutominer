@@ -109,3 +109,110 @@ code {
   padding: 4px 8px;
   background: var(--code-bg);
 }
+/* =====================================================
+   FIX VENTANA DE CONFIRMACIÓN DE PAGO
+   =====================================================
+   Agregar estas clases al FINAL de tu App.css existente
+   ===================================================== */
+
+/* ============== TOAST NO BLOQUEANTE ============== */
+/* Antes era .checking-payment que bloqueaba toda la pantalla
+   Ahora es .checking-payment-toast que es un toast en la parte inferior */
+
+.checking-payment-toast {
+  position: fixed;
+  bottom: 100px; /* arriba del bottom-nav */
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 400;
+  width: calc(100% - 30px);
+  max-width: 400px;
+  pointer-events: none; /* no bloquea clicks fuera del toast */
+  animation: slideUp 0.3s ease;
+}
+
+.checking-payment-content {
+  background: rgba(0, 168, 255, 0.95);
+  backdrop-filter: blur(15px);
+  -webkit-backdrop-filter: blur(15px);
+  border: 1px solid #00a8ff;
+  border-radius: 12px;
+  padding: 12px 15px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  pointer-events: auto; /* el toast SÍ es clickable */
+}
+
+.spinner-small {
+  width: 24px;
+  height: 24px;
+  border: 3px solid rgba(255, 255, 255, 0.3);
+  border-top-color: #fff;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  flex-shrink: 0;
+}
+
+.checking-payment-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  color: #fff;
+  text-align: left;
+  min-width: 0;
+}
+
+.checking-payment-text strong {
+  font-size: 14px;
+  font-weight: bold;
+}
+
+.checking-payment-text span {
+  font-size: 11px;
+  opacity: 0.9;
+}
+
+.checking-payment-close {
+  background: rgba(0, 0, 0, 0.3);
+  border: none;
+  color: #fff;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.2s;
+  padding: 0;
+  line-height: 1;
+}
+
+.checking-payment-close:hover {
+  background: rgba(0, 0, 0, 0.5);
+}
+
+.checking-payment-close:active {
+  transform: scale(0.9);
+}
+
+@keyframes slideUp {
+  from {
+    transform: translate(-50%, 100%);
+    opacity: 0;
+  }
+  to {
+    transform: translate(-50%, 0);
+    opacity: 1;
+  }
+}
+
+/* ============== ELIMINAR/REEMPLAZAR EL ESTILO ANTERIOR ============== */
+/* Si tienes la clase .checking-payment antigua en tu App.css,
+   puedes dejarla (no se usa) o eliminarla.
+   La nueva clase .checking-payment-toast la reemplaza. */

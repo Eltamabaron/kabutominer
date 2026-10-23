@@ -675,9 +675,23 @@ function App() {
       )}
 
       {checkingPayment && (
-        <div className="checking-payment">
-          <div className="spinner"></div>
-          <p>Esperando confirmación de pago...</p>
+        <div className="checking-payment-toast">
+          <div className="checking-payment-content">
+            <div className="spinner-small"></div>
+            <div className="checking-payment-text">
+              <strong>Esperando pago...</strong>
+              <span>Verificando automáticamente</span>
+            </div>
+            <button
+              className="checking-payment-close"
+              onClick={() => {
+                setCheckingPayment(false);
+                showNotification('✅ Pago sigue verificándose en segundo plano. Te avisaremos cuando se confirme.', 'info');
+              }}
+            >
+              ✕
+            </button>
+          </div>
         </div>
       )}
 
