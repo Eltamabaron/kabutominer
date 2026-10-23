@@ -1317,3 +1317,113 @@ body {
   border-radius: 3px;
   font-weight: bold;
 }
+/* =====================================================
+   ESTILOS PARA SISTEMA DE REFERIDOS
+   =====================================================
+   Agregar al final de tu App.css existente
+   ===================================================== */
+
+/* ============== STATS DE REFERIDOS ============== */
+.referral-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.ref-stat-item {
+  background: rgba(255, 215, 0, 0.05);
+  border: 1px solid rgba(255, 215, 0, 0.2);
+  border-radius: 10px;
+  padding: 12px 8px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ref-stat-value {
+  font-size: 20px;
+  font-weight: bold;
+  color: #ffd700;
+}
+
+.ref-stat-label {
+  font-size: 11px;
+  color: #888;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+/* ============== TEAM WALLET CARD MEJORADA ============== */
+.team-wallet-card {
+  background: linear-gradient(135deg, rgba(255, 215, 0, 0.1) 0%, rgba(20, 20, 20, 0.8) 100%);
+  border: 1px solid #ffd700;
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  box-shadow: 0 4px 15px rgba(255, 215, 0, 0.1);
+}
+
+.team-wallet-info {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  flex: 1;
+}
+
+.team-wallet-title {
+  font-size: 16px;
+  font-weight: bold;
+  color: #ffd700;
+}
+
+.team-wallet-desc {
+  font-size: 12px;
+  color: #888;
+}
+
+.team-wallet-balance {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 10px;
+}
+
+.team-wallet-balance strong {
+  color: #fff;
+  font-size: 18px;
+  font-weight: bold;
+}
+
+.team-wallet-balance .buy-btn {
+  width: auto;
+  padding: 8px 15px;
+}
+
+/* ============== LISTA DE REFERIDOS ============== */
+.upgrade-card.vip-card {
+  border-color: #ffd700;
+  background: rgba(255, 215, 0, 0.05);
+}
+
+.upgrade-card.vip-card .upgrade-emoji {
+  background: rgba(255, 215, 0, 0.1);
+}
+
+/* ============== RESPONSIVE ============== */
+@media (max-width: 380px) {
+  .referral-stats {
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 6px;
+  }
+  .ref-stat-value {
+    font-size: 16px;
+  }
+  .ref-stat-label {
+    font-size: 9px;
+  }
+}

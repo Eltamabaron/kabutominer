@@ -107,6 +107,88 @@ async function getOrCreateUser(telegramId, username = '', firstName = '') {
 }
 
 // =====================================================
+// FUNCIÓN: Dar comisión al referente (10% de compras)
+// =====================================================
+async function givePurchaseCommission(referredId, planName, amountUsd) {
+  try {
+    // Buscar quién refirió a este usuario
+    const { data: referral } = await supabase
+      .from('referrals')
+      .select('*')
+      .eq('referred_id', referredId)
+      .single();
+
+    if (!referral) {
+      console.log('ℹ️ Sin referente para', referredId);
+      return false;
+    }
+
+    const referrerId = referral.referrer_id;
+    const commission = parseFloat((amountUsd * 0.10).toFixed(2)); // 10%
+
+    // 1. Actualizar tabla referrals
+    await supabase
+      .from('referrals')
+      .update({
+        commission: (referral.commission || 0) + commission,
+        total_commission_earned: (referral.total_commission_earned || 0) + commission,
+        last_commission_at: new Date().toISOString()
+      })
+      .eq('id', referral.id);
+
+    // 2. Insertar en historial de comisiones
+    await supabase.from('referral_commissions').insert([{
+      referrer_id: referrerId,
+      referred_id: referredId,
+      commission_type: 'purchase',
+      amount: commission,
+      source_amount: amountUsd,
+      description: `10% de compra ${planName}`
+    }]);
+
+    // 3. Sumar al balance del referente (Team Wallet = balance de comisiones pendientes)
+    // Lo guardamos en el campo 'total_mined' temporalmente como comisión pendiente
+    // Mejor: usar un campo separado. Vamos a sumar al balance directamente.
+    const { data: referrer } = await supabase
+      .from('users')
+      .select('*')
+      .eq('telegram_id', referrerId)
+      .single();
+
+    if (referrer) {
+      await supabase
+        .from('users')
+        .update({
+          total_referral_earned: (referrer.total_referral_earned || 0) + commission
+        })
+        .eq('telegram_id', referrerId);
+
+      console.log(`💰 Comisión 10% dada: ${referrerId} recibió ${commission} (de compra de ${referredId})`);
+
+      // Notificar al referente via bot
+      if (notifyVIPActivated) {
+        try {
+          const bot = require('./bot');
+          if (bot.bot) {
+            await bot.bot.sendMessage(referrerId,
+              `💰 *¡Comisión de referido!*\n\n✅ Tu referido compró *${planName}*\n💵 Recibiste: *+${commission} $KABUTO* (10% de $${amountUsd})\n\n📊 Total comisiones: ${((referrer.total_referral_earned || 0) + commission).toFixed(2)} $KABUTO`,
+              { parse_mode: 'Markdown' }
+            );
+          }
+        } catch (e) {
+          console.log('No se pudo notificar al referente:', e.message);
+        }
+      }
+    }
+
+    return true;
+  } catch (err) {
+    console.error('Error givePurchaseCommission:', err);
+    return false;
+  }
+}
+
+// =====================================================
 // FUNCIÓN: Activar VIP (centralizada)
 // =====================================================
 async function activateVIP(telegramId, planName, invoiceId) {
@@ -162,6 +244,9 @@ async function activateVIP(telegramId, planName, invoiceId) {
           `🦏 *Nueva compra VIP confirmada*\n\n📦 Plan: *${planName}*\n💰 Monto: *$${plan.price} USD*\n💱 Moneda: ${purchase.currency}\n⚡ Hash Power añadido: *+${plan.hash_power} H/s*\n👤 Usuario: ${maskedName}\n🕐 Hora: ${new Date().toUTCString()}\n\n✅ Pago verificado vía Plisio`
         );
       }
+
+      // 🆕 Dar comisión al referente (10% de la compra)
+      await givePurchaseCommission(telegramId, planName, plan.price);
     }
 
     await supabase
@@ -554,12 +639,174 @@ app.post('/api/register_referral', async (req, res) => {
     await supabase.from('referrals').insert([{
       referrer_id: referrer_id,
       referred_id: referred_id,
-      commission: 0
+      commission: 0,
+      total_commission_earned: 0
     }]);
 
     res.json({ success: true });
   } catch (err) {
     console.error('Error referral:', err);
+    res.status(500).json({ error: 'Error' });
+  }
+});
+
+// =====================================================
+// 🆕 API: OBTENER REFERIDOS CON COMISIONES
+// =====================================================
+app.get('/api/referrals/:telegram_id', async (req, res) => {
+  try {
+    const telegramId = req.params.telegram_id;
+
+    // Obtener todos los referidos de este usuario
+    const { data: referrals } = await supabase
+      .from('referrals')
+      .select('*')
+      .eq('referrer_id', telegramId);
+
+    if (!referrals || referrals.length === 0) {
+      return res.json({
+        success: true,
+        referrals: [],
+        total_commission: 0,
+        active_vip_count: 0,
+        total_referrals: 0
+      });
+    }
+
+    // Para cada referido, obtener su info actual (vip_level, first_name, etc)
+    const referredIds = referrals.map(r => r.referred_id);
+    const { data: referredUsers } = await supabase
+      .from('users')
+      .select('telegram_id, first_name, username, vip_level, hash_power, banned')
+      .in('telegram_id', referredIds);
+
+    // Combinar datos
+    const referralsWithInfo = referrals.map(ref => {
+      const userInfo = referredUsers?.find(u => u.telegram_id === ref.referred_id) || {};
+      return {
+        telegram_id: ref.referred_id,
+        first_name: userInfo.first_name || 'Usuario',
+        username: userInfo.username || '',
+        is_vip: (userInfo.vip_level || 0) > 0 ? 1 : 0,
+        vip_level: userInfo.vip_level || 0,
+        hash_power: userInfo.hash_power || 0,
+        banned: userInfo.banned || 0,
+        commission_earned: ref.total_commission_earned || 0,
+        created_at: ref.created_at
+      };
+    });
+
+    const totalCommission = referrals.reduce((sum, r) => sum + (r.total_commission_earned || 0), 0);
+    const activeVipCount = referralsWithInfo.filter(r => r.is_vip === 1).length;
+
+    // Obtener comisiones pendientes (no reclamadas)
+    const { data: user } = await supabase
+      .from('users')
+      .select('total_referral_earned, balance')
+      .eq('telegram_id', telegramId)
+      .single();
+
+    const pendingCommission = user?.total_referral_earned || 0;
+
+    res.json({
+      success: true,
+      referrals: referralsWithInfo,
+      total_commission: totalCommission,
+      active_vip_count: activeVipCount,
+      total_referrals: referrals.length,
+      pending_commission: pendingCommission
+    });
+  } catch (err) {
+    console.error('Error get referrals:', err);
+    res.status(500).json({ error: 'Error' });
+  }
+});
+
+// =====================================================
+// 🆕 API: RECLAMAR COMISIONES DEL TEAM WALLET
+// =====================================================
+app.post('/api/claim_team_wallet', async (req, res) => {
+  try {
+    const { telegram_id } = req.body;
+
+    const { data: user } = await supabase
+      .from('users')
+      .select('*')
+      .eq('telegram_id', telegram_id)
+      .single();
+
+    if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
+
+    const pendingAmount = user.total_referral_earned || 0;
+
+    if (pendingAmount <= 0) {
+      return res.json({ success: false, message: 'No hay comisiones pendientes' });
+    }
+
+    // Mover comisiones al balance del usuario y resetear total_referral_earned
+    const newBalance = (user.balance || 0) + pendingAmount;
+    await supabase
+      .from('users')
+      .update({
+        balance: newBalance,
+        total_referral_earned: 0
+      })
+      .eq('telegram_id', telegram_id);
+
+    console.log(`💰 ${telegram_id} reclamó ${pendingAmount} de comisiones`);
+
+    res.json({
+      success: true,
+      claimed_amount: pendingAmount,
+      new_balance: newBalance
+    });
+  } catch (err) {
+    console.error('Error claim team wallet:', err);
+    res.status(500).json({ error: 'Error' });
+  }
+});
+
+// =====================================================
+// 🆕 API: OBTENER HISTORIAL DE COMISIONES
+// =====================================================
+app.get('/api/commissions/:telegram_id', async (req, res) => {
+  try {
+    const telegramId = req.params.telegram_id;
+    const limit = parseInt(req.query.limit) || 20;
+
+    const { data: commissions } = await supabase
+      .from('referral_commissions')
+      .select('*')
+      .eq('referrer_id', telegramId)
+      .order('created_at', { ascending: false })
+      .limit(limit);
+
+    // Obtener info de los referidos
+    const referredIds = [...new Set((commissions || []).map(c => c.referred_id))];
+    let referredUsers = [];
+    if (referredIds.length > 0) {
+      const { data } = await supabase
+        .from('users')
+        .select('telegram_id, first_name, username')
+        .in('telegram_id', referredIds);
+      referredUsers = data || [];
+    }
+
+    const commissionsWithInfo = (commissions || []).map(c => {
+      const userInfo = referredUsers.find(u => u.telegram_id === c.referred_id) || {};
+      return {
+        ...c,
+        referred_name: userInfo.first_name || 'Usuario',
+        referred_username: userInfo.username || ''
+      };
+    });
+
+    res.json({
+      success: true,
+      commissions: commissionsWithInfo
+    });
+  } catch (err) {
+    console.error('Error commissions:', err);
     res.status(500).json({ error: 'Error' });
   }
 });

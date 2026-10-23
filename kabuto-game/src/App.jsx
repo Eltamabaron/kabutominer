@@ -20,6 +20,8 @@ function App() {
   const [activeTab, setActiveTab] = useState('mina');
   const [referrals, setReferrals] = useState([]);
   const [referralLink, setReferralLink] = useState('');
+  const [totalReferralEarned, setTotalReferralEarned] = useState(0);
+  const [claimingTeam, setClaimingTeam] = useState(false);
   const [adminStats, setAdminStats] = useState(null);
   const [adminUsers, setAdminUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -27,8 +29,8 @@ function App() {
   const [showWithdrawBox, setShowWithdrawBox] = useState(false);
   const [withdrawAddress, setWithdrawAddress] = useState('');
   const [withdrawAmount, setWithdrawAmount] = useState('');
-  const [withdrawCurrency, setWithdrawCurrency] = useState('TON');
-  const [selectedCurrency, setSelectedCurrency] = useState('TON');
+  const [withdrawCurrency, setWithdrawCurrency] = useState('USDT');
+  const [selectedCurrency, setSelectedCurrency] = useState('USDT');
 
   const [adminView, setAdminView] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -148,6 +150,7 @@ function App() {
           setHashPower(Number(data.hash_power) || 10);
           setIsAdmin(adminStatus);
           loadCompletedTasks(data.telegram_id);
+          loadReferrals(data.telegram_id);
         }
       } catch (err) {
         console.error('Error login:', err);
@@ -181,6 +184,54 @@ function App() {
       setClaimedTasks(data.completed || []);
     } catch (err) {
       console.error('Error tareas:', err);
+    }
+  }
+
+  // =====================================================
+  // 🆕 CARGAR REFERIDOS CON COMISIONES
+  // =====================================================
+  async function loadReferrals(telegramId) {
+    try {
+      const r = await fetch(`${API_URL}/api/referrals/${telegramId}`);
+      const data = await r.json();
+      if (data.success) {
+        setReferrals(data.referrals || []);
+        setTeamWallet(data.pending_commission || 0);
+        setTotalReferralEarned(data.total_commission || 0);
+        console.log('👥 Referidos cargados:', data.referrals?.length, 'comisiones:', data.pending_commission);
+      }
+    } catch (err) {
+      console.error('Error cargar referidos:', err);
+    }
+  }
+
+  // =====================================================
+  // 🆕 RECLAMAR COMISIONES DEL TEAM WALLET
+  // =====================================================
+  async function handleClaimTeam() {
+    if (teamWallet <= 0 || claimingTeam) return;
+    setClaimingTeam(true);
+    showNotification('Reclamando comisiones...', 'info');
+    try {
+      const r = await fetch(`${API_URL}/api/claim_team_wallet`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ telegram_id: user.telegram_id })
+      });
+      const data = await r.json();
+      if (data.success) {
+        setHoldingWallet(data.new_balance);
+        setTeamWallet(0);
+        setTotalReferralEarned(prev => prev); // mantener histórico
+        showModal('¡Comisiones Reclamadas!', `Has reclamado ${data.claimed_amount.toFixed(2)} $KABUTO de tu Team Wallet.\n\nSaldo actual: ${data.new_balance.toFixed(2)} $KABUTO`);
+      } else {
+        showModal('Error', data.message || 'No se pudo reclamar', 'error');
+      }
+    } catch (err) {
+      console.error('Error claim team:', err);
+      showModal('Error', 'No se pudo conectar', 'error');
+    } finally {
+      setClaimingTeam(false);
     }
   }
 
@@ -788,29 +839,64 @@ function App() {
         <div className="shop-container">
           <h2 className="shop-title">INVITA Y GANA</h2>
           <p className="shop-subtitle">Necesitas {REQUIRED_VIP_REFERRALS} referidos VIP para desbloquear retiros.</p>
+
+          {/* Stats de referidos */}
+          <div className="referral-stats">
+            <div className="ref-stat-item">
+              <span className="ref-stat-value">{referrals.length}</span>
+              <span className="ref-stat-label">Total</span>
+            </div>
+            <div className="ref-stat-item">
+              <span className="ref-stat-value">{activeVipReferrals}</span>
+              <span className="ref-stat-label">VIP</span>
+            </div>
+            <div className="ref-stat-item">
+              <span className="ref-stat-value">{totalReferralEarned.toFixed(2)}</span>
+              <span className="ref-stat-label">Ganado</span>
+            </div>
+          </div>
+
           <div className="team-wallet-card">
             <div className="team-wallet-info">
               <span className="team-wallet-title">👥 TEAM WALLET</span>
-              <span className="team-wallet-desc">Gana el 10% de lo que minan tus amigos + 5% de sus compras.</span>
+              <span className="team-wallet-desc">Gana 10% de cada compra VIP de tus referidos.</span>
             </div>
             <div className="team-wallet-balance">
               <strong>{teamWallet.toFixed(2)} $KABUTO</strong>
-              <button className="buy-btn" onClick={() => showNotification('Próximamente', 'info')} disabled={teamWallet <= 0}>RECLAMAR</button>
+              <button
+                className="buy-btn"
+                onClick={handleClaimTeam}
+                disabled={teamWallet <= 0 || claimingTeam}
+              >
+                {claimingTeam ? '...' : 'RECLAMAR'}
+              </button>
             </div>
           </div>
+
           <div className="referral-box">
             <input type="text" value={referralLink} readOnly className="ref-input" />
             <button className="buy-btn" onClick={copyLink}>Copiar</button>
           </div>
-          <h3 className="friends-title">AMIGOS VIP ({activeVipReferrals}/{REQUIRED_VIP_REFERRALS})</h3>
-          {referrals.length === 0 ? <p className="no-friends">Aún no has invitado a nadie. ¡Comparte tu enlace!</p> : referrals.map((ref) => (
-            <div key={ref.telegram_id} className="upgrade-card">
-              <div className="upgrade-info">
-                <span className="upgrade-emoji">{ref.is_vip ? '👑' : '👤'}</span>
-                <div><strong>{ref.first_name} {ref.is_vip ? '(VIP)' : '(FREE)'}</strong><span className="upgrade-profit">{ref.is_vip ? 'Activo' : 'Inactivo'}</span></div>
+
+          <h3 className="friends-title">MIS AMIGOS ({referrals.length})</h3>
+          {referrals.length === 0 ? (
+            <p className="no-friends">Aún no has invitado a nadie. ¡Comparte tu enlace!</p>
+          ) : (
+            referrals.map((ref) => (
+              <div key={ref.telegram_id} className={`upgrade-card ${ref.is_vip ? 'vip-card' : ''}`}>
+                <div className="upgrade-info">
+                  <span className="upgrade-emoji">{ref.is_vip ? '👑' : '👤'}</span>
+                  <div>
+                    <strong>{ref.first_name} {ref.is_vip ? '(VIP)' : '(FREE)'}</strong>
+                    <span className="upgrade-profit">
+                      {ref.is_vip ? `⚡ ${ref.hash_power} H/s` : 'Inactivo'}
+                      {ref.commission_earned > 0 && ` · 💰 ${ref.commission_earned.toFixed(2)}`}
+                    </span>
+                  </div>
+                </div>
               </div>
-            </div>
-          ))}
+            ))
+          )}
         </div>
       )}
 
