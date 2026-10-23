@@ -520,17 +520,16 @@ function App() {
     { id: 'visit_web', name: 'Visita nuestro Patrocinador', reward: 200, link: 'https://example.com', icon: '🌐' }
   ];
 
-  // 🚀 TODAS las monedas soportadas (excepto TON)
+  // 🚀 CÓDIGOS CORRECTOS DE PLISIO
   const CURRENCIES = [
     { code: 'USDT', name: 'USDT', icon: '🟢', img: '/usdt.png' },
-    { code: 'USDTTRC20', name: 'USDT TRC20', icon: '🟢', img: '/usdt-trc20.png' },
-    { code: 'USDTERC20', name: 'USDT ERC20', icon: '🟢', img: '/usdt-erc20.png' },
-    { code: 'USDTBEP20', name: 'USDT BEP20', icon: '🟢', img: '/usdt-bep20.png' },
+    { code: 'USDT_TRX', name: 'USDT TRC20', icon: '🟢', img: '/usdt-trc20.png' },
+    { code: 'USDT_BSC', name: 'USDT BEP20', icon: '🟢', img: '/usdt-bep20.png' },
+    { code: 'USDC', name: 'USDC', icon: '🔵', img: '/usdc.png' },
     { code: 'LTC', name: 'Litecoin', icon: '🪙', img: '/ltc.png' },
     { code: 'TRX', name: 'Tron', icon: '🔴', img: '/trx.png' },
     { code: 'BNB', name: 'BNB Chain', icon: '🟡', img: '/bnb.png' },
     { code: 'SOL', name: 'Solana', icon: '☀️', img: '/sol.png' },
-    { code: 'USDCERC20', name: 'USDC ERC20', icon: '🔵', img: '/usdc-erc20.png' },
     { code: 'DOGE', name: 'Dogecoin', icon: '🐕', img: '/doge.png' }
   ];
 

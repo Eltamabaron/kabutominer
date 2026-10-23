@@ -39,17 +39,16 @@ const VIP_PLANS = {
   5: { name: 'VIP 5', price: 50, hash_power: 5000 },
 };
 
-// 🚀 TODAS las monedas soportadas (excepto TON que tiene mínimo $5)
+// 🚀 CÓDIGOS CORRECTOS DE PLISIO (no USDTRC20, sino USDT_TRX, etc.)
 const SUPPORTED_CURRENCIES = [
-  'USDT',           // Tether (TRC-20 por defecto)
-  'USDTTRC20',      // Tether TRC-20 (comisión baja)
-  'USDTERC20',      // Tether ERC-20 (Ethereum)
-  'USDTBEP20',      // Tether BEP-20 (BNB Chain)
+  'USDT',           // Tether ERC-20 (Ethereum)
+  'USDT_TRX',       // Tether TRC-20 (Tron) - comisión más baja
+  'USDT_BSC',       // Tether BEP-20 (BNB Chain)
+  'USDC',           // USD Coin ERC-20 (Ethereum)
   'LTC',            // Litecoin
   'TRX',            // Tron
   'BNB',            // BNB Chain
   'SOL',            // Solana
-  'USDCERC20',      // USD Coin ERC-20
   'DOGE'            // Dogecoin
 ];
 
