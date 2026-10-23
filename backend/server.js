@@ -300,6 +300,26 @@ app.post('/api/save', async (req, res) => {
     const { telegram_id, balance, hash_power, total_mined } = req.body;
     if (!telegram_id) return res.status(400).json({ error: 'telegram_id requerido' });
 
+    // 🆕 Calcular comisión de minado (5%) para el referente
+    // Solo si el balance aumentó desde el último save
+    try {
+      const { data: currentUser } = await supabase
+        .from('users')
+        .select('balance, total_mined')
+        .eq('telegram_id', telegram_id)
+        .single();
+
+      if (currentUser) {
+        const balanceIncrease = Math.max(0, (balance || 0) - (currentUser.balance || 0));
+        // Si aumentó más de 0.001, dar 5% al referente (no en cada save, solo incrementos reales)
+        if (balanceIncrease > 0.001) {
+          await giveMiningCommission(telegram_id, balanceIncrease);
+        }
+      }
+    } catch (commissionErr) {
+      console.error('Error comisión minado (no crítico):', commissionErr.message);
+    }
+
     const { error } = await supabase
       .from('users')
       .update({
@@ -317,6 +337,67 @@ app.post('/api/save', async (req, res) => {
     res.status(500).json({ error: 'Error al guardar' });
   }
 });
+
+// =====================================================
+// 🆕 FUNCIÓN: Dar comisión de minado (5%) al referente
+// =====================================================
+async function giveMiningCommission(referredId, minedAmount) {
+  try {
+    const { data: referral } = await supabase
+      .from('referrals')
+      .select('*')
+      .eq('referred_id', referredId)
+      .single();
+
+    if (!referral) return false;
+
+    const referrerId = referral.referrer_id;
+    const commission = parseFloat((minedAmount * 0.05).toFixed(6)); // 5%
+
+    if (commission < 0.0001) return false; //太小, no registrar
+
+    // 1. Actualizar referrals
+    await supabase
+      .from('referrals')
+      .update({
+        commission: (referral.commission || 0) + commission,
+        total_commission_earned: (referral.total_commission_earned || 0) + commission,
+        last_commission_at: new Date().toISOString()
+      })
+      .eq('id', referral.id);
+
+    // 2. Insertar en historial
+    await supabase.from('referral_commissions').insert([{
+      referrer_id: referrerId,
+      referred_id: referredId,
+      commission_type: 'mining',
+      amount: commission,
+      source_amount: minedAmount,
+      description: `5% de minado`
+    }]);
+
+    // 3. Sumar al total_referral_earned del referente
+    const { data: referrer } = await supabase
+      .from('users')
+      .select('total_referral_earned')
+      .eq('telegram_id', referrerId)
+      .single();
+
+    if (referrer) {
+      await supabase
+        .from('users')
+        .update({
+          total_referral_earned: (referrer.total_referral_earned || 0) + commission
+        })
+        .eq('telegram_id', referrerId);
+    }
+
+    return true;
+  } catch (err) {
+    console.error('Error giveMiningCommission:', err);
+    return false;
+  }
+}
 
 // =====================================================
 // API: OBTENER ESTADO
@@ -615,6 +696,226 @@ app.get('/api/tasks/:telegram_id', async (req, res) => {
     res.json({ completed: (data || []).map(t => t.task_id) });
   } catch (err) {
     res.json({ completed: [] });
+  }
+});
+
+// =====================================================
+// 🆕 API: LOGIN STREAK - Bonus diario por entrar
+// =====================================================
+app.post('/api/daily_login', async (req, res) => {
+  try {
+    const { telegram_id } = req.body;
+    if (!telegram_id) return res.status(400).json({ error: 'telegram_id requerido' });
+
+    const { data: user } = await supabase
+      .from('users')
+      .select('*')
+      .eq('telegram_id', telegram_id)
+      .single();
+
+    if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
+
+    const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+    const lastLoginDate = user.last_login_date;
+
+    // Si ya reclamó hoy, no dar bonus
+    if (lastLoginDate === today) {
+      return res.json({
+        success: false,
+        already_claimed: true,
+        streak: user.last_login_streak || 0,
+        message: 'Ya reclamaste tu bonus diario hoy'
+      });
+    }
+
+    // Calcular nuevo streak
+    let newStreak = 1;
+    if (lastLoginDate) {
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      const yesterdayStr = yesterday.toISOString().split('T')[0];
+      if (lastLoginDate === yesterdayStr) {
+        // Vino ayer, streak +1
+        newStreak = (user.last_login_streak || 0) + 1;
+      } else {
+        // No vino ayer, resetear streak
+        newStreak = 1;
+      }
+    }
+
+    // Bonus según streak (máximo 7 días)
+    const streakBonus = Math.min(newStreak, 7) * 10; // 10, 20, 30...70 $KABUTO
+    const newBalance = (user.balance || 0) + streakBonus;
+
+    await supabase
+      .from('users')
+      .update({
+        balance: newBalance,
+        last_login_streak: newStreak,
+        last_login_date: today
+      })
+      .eq('telegram_id', telegram_id);
+
+    console.log(`📅 Login streak: ${telegram_id} día ${newStreak} (+${streakBonus} $KABUTO)`);
+
+    res.json({
+      success: true,
+      streak: newStreak,
+      bonus: streakBonus,
+      new_balance: newBalance,
+      message: `¡Bonus diario reclamado! Día ${newStreak}: +${streakBonus} $KABUTO`
+    });
+  } catch (err) {
+    console.error('Error daily_login:', err);
+    res.status(500).json({ error: 'Error' });
+  }
+});
+
+// =====================================================
+// 🆕 API: ESTADO DEL LOGIN STREAK
+// =====================================================
+app.get('/api/daily_login/:telegram_id', async (req, res) => {
+  try {
+    const { data: user } = await supabase
+      .from('users')
+      .select('last_login_streak, last_login_date, balance')
+      .eq('telegram_id', req.params.telegram_id)
+      .single();
+
+    if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
+
+    const today = new Date().toISOString().split('T')[0];
+    const alreadyClaimedToday = user.last_login_date === today;
+
+    res.json({
+      success: true,
+      streak: user.last_login_streak || 0,
+      already_claimed: alreadyClaimedToday,
+      last_login_date: user.last_login_date,
+      next_bonus: (Math.min((user.last_login_streak || 0) + 1, 7)) * 10
+    });
+  } catch (err) {
+    res.status(500).json({ error: 'Error' });
+  }
+});
+
+// =====================================================
+// 🆕 API: GIRAR RULETA DIARIA
+// =====================================================
+app.post('/api/roulette_spin', async (req, res) => {
+  try {
+    const { telegram_id } = req.body;
+    if (!telegram_id) return res.status(400).json({ error: 'telegram_id requerido' });
+
+    // Verificar si ya giró hoy
+    const today = new Date().toISOString().split('T')[0];
+    const { data: todaySpin } = await supabase
+      .from('roulette_spins')
+      .select('*')
+      .eq('telegram_id', telegram_id)
+      .gte('created_at', today + 'T00:00:00')
+      .lte('created_at', today + 'T23:59:59')
+      .limit(1)
+      .single();
+
+    if (todaySpin) {
+      return res.json({
+        success: false,
+        already_spun: true,
+        message: 'Ya giraste la ruleta hoy. Vuelve mañana!'
+      });
+    }
+
+    // Premios de la ruleta (probabilidades)
+    const prizes = [
+      { reward: 5,    chance: 30, label: '5 $KABUTO',     color: '#4caf50' },
+      { reward: 10,   chance: 25, label: '10 $KABUTO',    color: '#2196f3' },
+      { reward: 25,   chance: 20, label: '25 $KABUTO',    color: '#9c27b0' },
+      { reward: 50,   chance: 12, label: '50 $KABUTO',    color: '#ff9800' },
+      { reward: 100,  chance: 8,  label: '100 $KABUTO',   color: '#f44336' },
+      { reward: 250,  chance: 4,  label: '250 $KABUTO',   color: '#ffd700' },
+      { reward: 500,  chance: 1,  label: '500 $KABUTO',   color: '#e91e63' }
+    ];
+
+    // Seleccionar premio basado en probabilidad
+    const total = prizes.reduce((s, p) => s + p.chance, 0);
+    let rand = Math.random() * total;
+    let selectedPrize = prizes[0];
+    for (const p of prizes) {
+      rand -= p.chance;
+      if (rand <= 0) {
+        selectedPrize = p;
+        break;
+      }
+    }
+
+    // Guardar giro
+    await supabase.from('roulette_spins').insert([{
+      telegram_id: telegram_id,
+      reward: selectedPrize.reward,
+      reward_type: 'kabuto'
+    }]);
+
+    // Sumar al balance del usuario
+    const { data: user } = await supabase
+      .from('users')
+      .select('balance')
+      .eq('telegram_id', telegram_id)
+      .single();
+
+    const newBalance = (user?.balance || 0) + selectedPrize.reward;
+    await supabase
+      .from('users')
+      .update({ balance: newBalance })
+      .eq('telegram_id', telegram_id);
+
+    console.log(`🎡 Ruleta: ${telegram_id} ganó ${selectedPrize.reward} $KABUTO`);
+
+    res.json({
+      success: true,
+      reward: selectedPrize.reward,
+      label: selectedPrize.label,
+      color: selectedPrize.color,
+      new_balance: newBalance
+    });
+  } catch (err) {
+    console.error('Error roulette:', err);
+    res.status(500).json({ error: 'Error' });
+  }
+});
+
+// =====================================================
+// 🆕 API: ESTADO DE LA RULETA
+// =====================================================
+app.get('/api/roulette_status/:telegram_id', async (req, res) => {
+  try {
+    const today = new Date().toISOString().split('T')[0];
+    const { data: todaySpin } = await supabase
+      .from('roulette_spins')
+      .select('*')
+      .eq('telegram_id', req.params.telegram_id)
+      .gte('created_at', today + 'T00:00:00')
+      .lte('created_at', today + 'T23:59:59')
+      .limit(1)
+      .single();
+
+    // Últimos 5 giros (historial)
+    const { data: history } = await supabase
+      .from('roulette_spins')
+      .select('*')
+      .eq('telegram_id', req.params.telegram_id)
+      .order('created_at', { ascending: false })
+      .limit(5);
+
+    res.json({
+      success: true,
+      can_spin: !todaySpin,
+      already_spun_today: !!todaySpin,
+      last_spin: todaySpin ? { reward: todaySpin.reward, date: todaySpin.created_at } : null,
+      history: (history || []).map(h => ({ reward: h.reward, date: h.created_at }))
+    });
+  } catch (err) {
+    res.json({ success: true, can_spin: true, history: [] });
   }
 });
 

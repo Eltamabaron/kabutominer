@@ -22,6 +22,11 @@ function App() {
   const [referralLink, setReferralLink] = useState('');
   const [totalReferralEarned, setTotalReferralEarned] = useState(0);
   const [claimingTeam, setClaimingTeam] = useState(false);
+  const [loginStreak, setLoginStreak] = useState({ streak: 0, already_claimed: false, next_bonus: 10 });
+  const [claimingDaily, setClaimingDaily] = useState(false);
+  const [rouletteStatus, setRouletteStatus] = useState({ can_spin: true, history: [] });
+  const [spinning, setSpinning] = useState(false);
+  const [rouletteResult, setRouletteResult] = useState(null);
   const [adminStats, setAdminStats] = useState(null);
   const [adminUsers, setAdminUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -151,6 +156,8 @@ function App() {
           setIsAdmin(adminStatus);
           loadCompletedTasks(data.telegram_id);
           loadReferrals(data.telegram_id);
+          loadLoginStreak(data.telegram_id);
+          loadRouletteStatus(data.telegram_id);
         }
       } catch (err) {
         console.error('Error login:', err);
@@ -232,6 +239,96 @@ function App() {
       showModal('Error', 'No se pudo conectar', 'error');
     } finally {
       setClaimingTeam(false);
+    }
+  }
+
+  // =====================================================
+  // 🆕 CARGAR LOGIN STREAK
+  // =====================================================
+  async function loadLoginStreak(telegramId) {
+    try {
+      const r = await fetch(`${API_URL}/api/daily_login/${telegramId}`);
+      const data = await r.json();
+      if (data.success) {
+        setLoginStreak(data);
+      }
+    } catch (err) {
+      console.error('Error cargar streak:', err);
+    }
+  }
+
+  // =====================================================
+  // 🆕 RECLAMAR BONUS DIARIO
+  // =====================================================
+  async function handleClaimDaily() {
+    if (loginStreak.already_claimed || claimingDaily) return;
+    setClaimingDaily(true);
+    try {
+      const r = await fetch(`${API_URL}/api/daily_login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ telegram_id: user.telegram_id })
+      });
+      const data = await r.json();
+      if (data.success) {
+        setHoldingWallet(data.new_balance);
+        setLoginStreak(prev => ({ ...prev, streak: data.streak, already_claimed: true, next_bonus: Math.min(data.streak + 1, 7) * 10 }));
+        showModal('🎉 ¡Bonus Diario!', `${data.message}\n\nStreak actual: ${data.streak} días`);
+      } else {
+        showModal('Info', data.message || 'Ya reclamaste hoy', 'error');
+      }
+    } catch (err) {
+      console.error('Error daily:', err);
+    } finally {
+      setClaimingDaily(false);
+    }
+  }
+
+  // =====================================================
+  // 🆕 CARGAR ESTADO RULETA
+  // =====================================================
+  async function loadRouletteStatus(telegramId) {
+    try {
+      const r = await fetch(`${API_URL}/api/roulette_status/${telegramId}`);
+      const data = await r.json();
+      if (data.success) {
+        setRouletteStatus(data);
+      }
+    } catch (err) {
+      console.error('Error cargar ruleta:', err);
+    }
+  }
+
+  // =====================================================
+  // 🆕 GIRAR RULETA
+  // =====================================================
+  async function handleSpinRoulette() {
+    if (!rouletteStatus.can_spin || spinning) return;
+    setSpinning(true);
+    setRouletteResult(null);
+    try {
+      const r = await fetch(`${API_URL}/api/roulette_spin`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ telegram_id: user.telegram_id })
+      });
+      const data = await r.json();
+      if (data.success) {
+        // Animación de giro (esperar 2s para mostrar resultado)
+        setTimeout(() => {
+          setRouletteResult({ reward: data.reward, label: data.label, color: data.color });
+          setHoldingWallet(data.new_balance);
+          setRouletteStatus(prev => ({ ...prev, can_spin: false, already_spun_today: true }));
+          setSpinning(false);
+          showModal('🎡 ¡Ruleta Girada!', `¡Ganaste ${data.label}!\n\nSaldo actual: ${data.new_balance.toFixed(2)} $KABUTO`);
+        }, 2000);
+      } else {
+        showModal('Info', data.message || 'Ya giraste hoy', 'error');
+        setSpinning(false);
+      }
+    } catch (err) {
+      console.error('Error roulette:', err);
+      setSpinning(false);
     }
   }
 
@@ -820,6 +917,67 @@ function App() {
         <div className="shop-container">
           <h2 className="shop-title">TAREAS DIARIAS</h2>
           <p className="shop-subtitle">Gana $KABUTO gratis completando tareas</p>
+
+          {/* 🆕 BONUS DIARIO POR LOGIN STREAK */}
+          <div className="daily-bonus-card">
+            <div className="daily-bonus-header">
+              <span className="daily-bonus-icon">📅</span>
+              <div>
+                <strong>Bonus Diario</strong>
+                <span className="daily-bonus-streak">🔥 Racha: {loginStreak.streak} día(s)</span>
+              </div>
+            </div>
+            <div className="streak-progress">
+              {[1,2,3,4,5,6,7].map(day => (
+                <div key={day} className={`streak-day ${(loginStreak.streak || 0) >= day ? 'completed' : ''}`}>
+                  <span>D{day}</span>
+                  <small>+{day * 10}</small>
+                </div>
+              ))}
+            </div>
+            <button
+              className="claim-btn"
+              onClick={handleClaimDaily}
+              disabled={loginStreak.already_claimed || claimingDaily}
+              style={{marginTop: '12px', padding: '10px', fontSize: '14px'}}
+            >
+              {loginStreak.already_claimed ? '✅ Ya reclamado hoy' : (claimingDaily ? '...' : `🎁 Reclamar +${loginStreak.next_bonus} $KABUTO`)}
+            </button>
+          </div>
+
+          {/* 🆕 RULETA DIARIA */}
+          <div className="roulette-card">
+            <div className="roulette-header">
+              <span className="roulette-icon">🎡</span>
+              <div>
+                <strong>Ruleta Diaria</strong>
+                <span className="roulette-desc">Gira y gana hasta 500 $KABUTO</span>
+              </div>
+            </div>
+            <div className={`roulette-wheel ${spinning ? 'spinning' : ''}`}>
+              {spinning ? '🎲' : '🎡'}
+            </div>
+            <button
+              className="claim-btn vip-btn"
+              onClick={handleSpinRoulette}
+              disabled={!rouletteStatus.can_spin || spinning}
+              style={{marginTop: '12px', padding: '10px', fontSize: '14px'}}
+            >
+              {!rouletteStatus.can_spin ? '⏰ Ya giraste hoy' : (spinning ? '🌀 Girando...' : '🎡 ¡GIRAR AHORA!')}
+            </button>
+            {rouletteStatus.history && rouletteStatus.history.length > 0 && (
+              <div className="roulette-history">
+                <small>Últimos giros:</small>
+                {rouletteStatus.history.slice(0, 3).map((h, i) => (
+                  <span key={i} className="roulette-history-item">+{h.reward}</span>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="divider"></div>
+          <h3 className="shop-title" style={{fontSize: '16px'}}>📋 Otras Tareas</h3>
+
           {tasks.map(task => {
             const isClaimed = claimedTasks.includes(task.id);
             return (
