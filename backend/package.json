@@ -1,14 +1,14 @@
 {
   "name": "kabuto-miner-backend",
-  "version": "2.3.0",
-  "description": "Backend de Kabuto Miner con Supabase + Bot + Canal de Transparencia",
+  "version": "3.0.0",
+  "description": "Backend Kabuto Miner v3.0 - Completo con Supabase, Bot, Anti-fraude, Niveles y Notificaciones",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.118.0",
-    "axios": "^1.20.0",
+    "@supabase/supabase-js": "^2.45.0",
+    "axios": "^1.7.0",
     "cors": "^2.8.5",
     "express": "^4.19.0",
     "node-telegram-bot-api": "^0.66.0"
