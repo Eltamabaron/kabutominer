@@ -520,14 +520,18 @@ function App() {
     { id: 'visit_web', name: 'Visita nuestro Patrocinador', reward: 200, link: 'https://example.com', icon: '🌐' }
   ];
 
+  // 🚀 TODAS las monedas soportadas (excepto TON)
   const CURRENCIES = [
-    { code: 'USDT', icon: '🟢', img: '/usdt.png' },
-    { code: 'TON', icon: '💎', img: '/ton.png' },
-    { code: 'LTC', icon: '🪙', img: '/ltc.png' },
-    { code: 'TRX', icon: '🔴', img: '/trx.png' },
-    { code: 'BNB', icon: '🟡', img: '/bnb.png' },
-    { code: 'SOL', icon: '☀️', img: '/sol.png' },
-    { code: 'USDC', icon: '🔵', img: '/usdc.png' }
+    { code: 'USDT', name: 'USDT', icon: '🟢', img: '/usdt.png' },
+    { code: 'USDTTRC20', name: 'USDT TRC20', icon: '🟢', img: '/usdt-trc20.png' },
+    { code: 'USDTERC20', name: 'USDT ERC20', icon: '🟢', img: '/usdt-erc20.png' },
+    { code: 'USDTBEP20', name: 'USDT BEP20', icon: '🟢', img: '/usdt-bep20.png' },
+    { code: 'LTC', name: 'Litecoin', icon: '🪙', img: '/ltc.png' },
+    { code: 'TRX', name: 'Tron', icon: '🔴', img: '/trx.png' },
+    { code: 'BNB', name: 'BNB Chain', icon: '🟡', img: '/bnb.png' },
+    { code: 'SOL', name: 'Solana', icon: '☀️', img: '/sol.png' },
+    { code: 'USDCERC20', name: 'USDC ERC20', icon: '🔵', img: '/usdc-erc20.png' },
+    { code: 'DOGE', name: 'Dogecoin', icon: '🐕', img: '/doge.png' }
   ];
 
   // =====================================================
@@ -725,9 +729,9 @@ function App() {
             <div className="currency-grid">
               {CURRENCIES.map(c => (
                 <button key={c.code} className={`currency-btn ${selectedCurrency === c.code ? 'selected' : ''}`} onClick={() => setSelectedCurrency(c.code)}>
-                  <img src={c.img} alt={c.code} className="currency-icon-img" onError={(e) => { e.target.style.display='none'; e.target.nextSibling.style.display='inline'; }} />
+                  <img src={c.img} alt={c.name} className="currency-icon-img" onError={(e) => { e.target.style.display='none'; e.target.nextSibling.style.display='inline'; }} />
                   <span className="currency-icon" style={{display:'none', fontSize:'24px'}}>{c.icon}</span>
-                  <span className="currency-code">{c.code}</span>
+                  <span className="currency-code">{c.name}</span>
                 </button>
               ))}
             </div>
@@ -851,9 +855,9 @@ function App() {
                   <div className="currency-grid">
                     {CURRENCIES.map(c => (
                       <button key={c.code} className={`currency-btn ${withdrawCurrency === c.code ? 'selected' : ''}`} onClick={() => setWithdrawCurrency(c.code)}>
-                        <img src={c.img} alt={c.code} className="currency-icon-img" onError={(e) => { e.target.style.display='none'; e.target.nextSibling.style.display='inline'; }} />
+                        <img src={c.img} alt={c.name} className="currency-icon-img" onError={(e) => { e.target.style.display='none'; e.target.nextSibling.style.display='inline'; }} />
                         <span className="currency-icon" style={{display:'none', fontSize:'24px'}}>{c.icon}</span>
-                        <span className="currency-code">{c.code}</span>
+                        <span className="currency-code">{c.name}</span>
                       </button>
                     ))}
                   </div>

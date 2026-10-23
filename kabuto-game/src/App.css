@@ -1249,3 +1249,71 @@ body {
   animation: bounce 1s infinite;
   margin-bottom: 20px;
 }
+/* =====================================================
+   AJUSTES PARA 10 CRIPTOMONEDAS EN EL SELECTOR
+   =====================================================
+   Agregar estas clases al FINAL de tu App.css existente
+   ===================================================== */
+
+/* ============== GRID DE 10 MONEDAS ============== */
+/* Cambiar a 4 columnas con wrap para que entren todas */
+.currency-grid {
+  grid-template-columns: repeat(4, 1fr) !important;
+  gap: 5px !important;
+}
+
+/* En pantallas pequeñas, 3 columnas */
+@media (max-width: 380px) {
+  .currency-grid {
+    grid-template-columns: repeat(3, 1fr) !important;
+  }
+}
+
+/* Ajustar el botón de moneda para 10 elementos */
+.currency-btn {
+  padding: 6px 2px !important;
+  gap: 1px !important;
+}
+
+.currency-icon-img {
+  width: 28px !important;
+  height: 28px !important;
+}
+
+.currency-code {
+  font-size: 9px !important;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  display: block;
+  text-align: center;
+}
+
+/* Asegurar que el selector no se vea apretado */
+.currency-selector {
+  margin-bottom: 25px !important;
+}
+
+.currency-selector label {
+  margin-bottom: 12px !important;
+}
+
+/* ============== INDICADOR DE RED EN EL LOGO ============== */
+/* Para las variantes de USDT, mostrar un pequeño badge de red */
+.currency-btn[data-network] {
+  position: relative;
+}
+
+.currency-btn[data-network]::after {
+  content: attr(data-network);
+  position: absolute;
+  bottom: 18px;
+  right: 2px;
+  background: rgba(0, 168, 255, 0.9);
+  color: #fff;
+  font-size: 7px;
+  padding: 1px 3px;
+  border-radius: 3px;
+  font-weight: bold;
+}

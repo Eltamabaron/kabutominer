@@ -39,8 +39,19 @@ const VIP_PLANS = {
   5: { name: 'VIP 5', price: 50, hash_power: 5000 },
 };
 
-// 🚀 FIX: DOGE removido (no soportado por Plisio en esta cuenta)
-const SUPPORTED_CURRENCIES = ['USDT', 'TON', 'LTC', 'TRX', 'BNB', 'SOL', 'USDC'];
+// 🚀 TODAS las monedas soportadas (excepto TON que tiene mínimo $5)
+const SUPPORTED_CURRENCIES = [
+  'USDT',           // Tether (TRC-20 por defecto)
+  'USDTTRC20',      // Tether TRC-20 (comisión baja)
+  'USDTERC20',      // Tether ERC-20 (Ethereum)
+  'USDTBEP20',      // Tether BEP-20 (BNB Chain)
+  'LTC',            // Litecoin
+  'TRX',            // Tron
+  'BNB',            // BNB Chain
+  'SOL',            // Solana
+  'USDCERC20',      // USD Coin ERC-20
+  'DOGE'            // Dogecoin
+];
 
 // =====================================================
 // MIDDLEWARE
