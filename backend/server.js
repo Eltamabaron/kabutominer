@@ -1714,6 +1714,11 @@ app.post('/api/admin/broadcast', async (req, res) => {
     }
     if (!message) return res.status(400).json({ error: 'Mensaje requerido' });
 
+    const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN || '';
+    if (!BOT_TOKEN) {
+      return res.status(500).json({ error: 'TELEGRAM_BOT_TOKEN no configurado en Render. Ve a Environment y agrégalo.' });
+    }
+
     const { data: users } = await supabase
       .from('users')
       .select('telegram_id, banned')
@@ -1721,34 +1726,37 @@ app.post('/api/admin/broadcast', async (req, res) => {
 
     let sent = 0;
     let failed = 0;
+    const total = (users || []).length;
 
-    try {
-      const bot = require('./bot');
-      if (bot.bot) {
-        for (const u of (users || [])) {
-          try {
-            await bot.bot.sendMessage(u.telegram_id,
-              `📢 *Mensaje de Kabuto Miner*\n\n${message}`,
-              { parse_mode: 'Markdown' }
-            );
-            sent++;
-            // Pequeña pausa para no saturar
-            await new Promise(r => setTimeout(r, 50));
-          } catch (e) {
-            failed++;
-          }
-        }
-      } else {
-        return res.status(500).json({ error: 'Bot no disponible' });
+    console.log(`📢 Iniciando broadcast a ${total} usuarios...`);
+
+    // Usar axios directamente con la API de Telegram (más robusto)
+    for (const u of (users || [])) {
+      try {
+        await axios.post(
+          `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`,
+          {
+            chat_id: u.telegram_id,
+            text: `📢 *Mensaje de Kabuto Miner*\n\n${message}`,
+            parse_mode: 'Markdown'
+          },
+          { timeout: 10000 }
+        );
+        sent++;
+        // Pausa de 50ms para no saturar la API de Telegram (límite: 30 msg/seg)
+        await new Promise(r => setTimeout(r, 50));
+      } catch (e) {
+        console.error(`❌ Error enviando a ${u.telegram_id}:`, e.response?.status || e.message);
+        failed++;
       }
-    } catch (e) {
-      return res.status(500).json({ error: 'Error enviando: ' + e.message });
     }
 
-    res.json({ success: true, sent, failed, total: (users || []).length });
+    console.log(`📢 Broadcast completado: ${sent} enviados, ${failed} fallidos de ${total}`);
+
+    res.json({ success: true, sent, failed, total });
   } catch (err) {
     console.error('Error broadcast:', err);
-    res.status(500).json({ error: 'Error' });
+    res.status(500).json({ error: 'Error: ' + err.message });
   }
 });
 
