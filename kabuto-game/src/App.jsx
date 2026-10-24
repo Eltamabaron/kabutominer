@@ -82,9 +82,9 @@ function App() {
   ];
 
   const tasks = [
-    { id: 'tg_channel', name: 'Únete a nuestro Canal', reward: 100, link: 'https://t.me/kabuto_payments', icon: '📢' },
-    { id: 'daily_login', name: 'Login Diario', reward: 50, link: null, icon: '📅' },
-    { id: 'visit_web', name: 'Visita nuestro Patrocinador', reward: 200, link: 'https://example.com', icon: '🌐' }
+    { id: 'tg_channel', name: 'Únete a nuestro Canal', reward: 100, link: 'https://t.me/kabuto_payments', icon: '📢', image: '/task-channel.png' },
+    { id: 'daily_login', name: 'Login Diario', reward: 50, link: null, icon: '📅', image: '/task-daily-login.png' },
+    { id: 'visit_web', name: 'Visita nuestro Patrocinador', reward: 200, link: 'https://example.com', icon: '🌐', image: '/task-website.png' }
   ];
 
   // LOGIN
@@ -623,7 +623,8 @@ function App() {
           <p className="shop-subtitle">Gana $KABUTO gratis completando tareas</p>
           <div className="daily-bonus-card">
             <div className="daily-bonus-header">
-              <span className="daily-bonus-icon">📅</span>
+              <img src="/daily-bonus.png" alt="Bonus" className="daily-bonus-icon" onError={(e) => { e.target.style.display='none'; e.target.nextSibling.style.display='inline-block'; }} />
+              <span className="daily-bonus-icon-fallback" style={{display:'none', fontSize:'40px'}}>📅</span>
               <div><strong>Bonus Diario</strong><span className="daily-bonus-streak">🔥 Racha: {loginStreak.streak} día(s)</span></div>
             </div>
             <div className="streak-progress">
@@ -633,7 +634,8 @@ function App() {
           </div>
           <div className="roulette-card">
             <div className="roulette-header">
-              <span className="roulette-icon">🎡</span>
+              <img src="/roulette.png" alt="Ruleta" className="roulette-icon" onError={(e) => { e.target.style.display='none'; e.target.nextSibling.style.display='inline-block'; }} />
+              <span className="roulette-icon-fallback" style={{display:'none', fontSize:'40px'}}>🎡</span>
               <div><strong>Ruleta Diaria</strong><span className="roulette-desc">Gana hasta 500 $KABUTO</span></div>
             </div>
             <div className={`roulette-wheel ${spinning ? 'spinning' : ''}`}>{spinning ? '🎲' : '🎡'}</div>
@@ -644,7 +646,11 @@ function App() {
           <h3 className="shop-title" style={{fontSize: '16px'}}>📋 Otras Tareas</h3>
           {tasks.map(task => { const isClaimed = claimedTasks.includes(task.id); return (
             <div key={task.id} className={`upgrade-card task-card ${isClaimed ? 'owned-card' : ''}`}>
-              <div className="upgrade-info"><span className="task-icon">{task.icon}</span><div><strong>{task.name}</strong><span className="upgrade-profit">+{task.reward} $KABUTO</span></div></div>
+              <div className="upgrade-info">
+                <img src={task.image} alt={task.name} className="task-icon-img" onError={(e) => { e.target.style.display='none'; e.target.nextSibling.style.display='inline-flex'; }} />
+                <span className="task-icon-fallback" style={{display:'none'}}>{task.icon}</span>
+                <div><strong>{task.name}</strong><span className="upgrade-profit">+{task.reward} $KABUTO</span></div>
+              </div>
               <button className="buy-btn" onClick={() => handleClaimTask(task)} disabled={isClaimed}>{isClaimed ? 'HECHO ✅' : 'RECLAMAR'}</button>
             </div>
           ); })}
