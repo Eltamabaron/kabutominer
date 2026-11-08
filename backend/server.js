@@ -1046,7 +1046,7 @@ app.get('/fail', (req, res) => {
 });
 
 // =====================================================
-// 🆕 PÁGINA DEL PATROCINADOR (tarea de visitar web)
+// 🆕 PÁGINA DEL PATROCINADOR (tarea de visitar web) - PROFESIONAL
 // =====================================================
 app.get('/sponsor', (req, res) => {
   const telegramId = req.query.tg || '';
@@ -1055,110 +1055,276 @@ app.get('/sponsor', (req, res) => {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Kabuto Miner - Patrocinador</title>
+<title>CryptoHub - Exchange & Wallet | Patrocinador Oficial de Kabuto Miner</title>
+<meta name="description" content="CryptoHub - La plataforma líder en intercambio de criptomonedas. Compra, vende y almacena tus criptomonedas favoritas con seguridad.">
 <style>
-* { margin:0; padding:0; box-sizing:border-box; }
-body { background:#0d1117; color:#fff; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif; min-height:100vh; }
-.container { max-width:500px; margin:0 auto; padding:20px; min-height:100vh; display:flex; flex-direction:column; }
-.header { text-align:center; padding:20px 0; border-bottom:1px solid #30363d; margin-bottom:20px; }
-.logo { font-size:48px; }
-.title { color:#ffd700; font-size:24px; margin:10px 0 5px; }
-.subtitle { color:#8b949e; font-size:14px; }
-.sponsor-card { background:#161b22; border:1px solid #30363d; border-radius:12px; padding:20px; margin:20px 0; text-align:center; }
-.sponsor-badge { background:rgba(255,215,0,0.1); color:#ffd700; padding:5px 15px; border-radius:20px; font-size:12px; font-weight:bold; display:inline-block; margin-bottom:15px; border:1px solid rgba(255,215,0,0.2); }
-.sponsor-name { font-size:20px; font-weight:bold; color:#fff; margin:10px 0; }
-.sponsor-desc { color:#8b949e; font-size:14px; line-height:1.5; margin-bottom:20px; }
-.sponsor-link { display:block; background:#00a8ff; color:#fff; padding:15px; border-radius:8px; text-decoration:none; font-weight:bold; margin-top:15px; transition:transform 0.1s; }
-.sponsor-link:active { transform:scale(0.96); }
-.timer-box { background:rgba(35,134,54,0.1); border:1px solid #238636; border-radius:10px; padding:20px; margin:20px 0; text-align:center; }
-.timer-text { font-size:16px; color:#3fb950; margin-bottom:10px; }
-.timer-count { font-size:48px; font-weight:bold; color:#3fb950; }
-.claimed-box { background:rgba(63,185,80,0.1); border:1px solid #3fb950; border-radius:10px; padding:20px; margin:20px 0; text-align:center; display:none; }
-.claimed-box.show { display:block; }
-.claimed-icon { font-size:60px; margin-bottom:10px; }
-.claimed-text { color:#3fb950; font-size:18px; font-weight:bold; }
-.back-btn { background:rgba(255,255,255,0.1); border:1px solid #444; color:#fff; padding:12px 20px; border-radius:8px; text-decoration:none; font-weight:bold; text-align:center; display:block; margin-top:auto; }
-.back-btn:active { transform:scale(0.96); }
-.ads-container { background:#161b22; border:1px solid #30363d; border-radius:10px; padding:15px; margin:15px 0; }
-.ads-title { color:#8b949e; font-size:12px; text-transform:uppercase; margin-bottom:10px; }
-.ad-item { padding:10px; border-bottom:1px solid #30363d; }
-.ad-item:last-child { border-bottom:none; }
-.ad-item a { color:#00a8ff; text-decoration:none; font-size:14px; }
-.ad-item p { color:#8b949e; font-size:12px; margin-top:5px; }
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#0a0e17;color:#e0e0e0;font-family:'Segoe UI',-apple-system,BlinkMacSystemFont,Roboto,Arial,sans-serif;line-height:1.6;overflow-x:hidden}
+
+/* SCROLLBAR */
+::-webkit-scrollbar{width:8px}::-webkit-scrollbar-track{background:#0a0e17}::-webkit-scrollbar-thumb{background:#1a2540;border-radius:4px}
+
+/* CONTAINER */
+.container{max-width:600px;margin:0 auto;min-height:100vh;display:flex;flex-direction:column}
+
+/* NAVBAR */
+.navbar{position:sticky;top:0;z-index:100;background:rgba(10,14,23,0.95);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-bottom:1px solid #1a2540;padding:15px 20px;display:flex;justify-content:space-between;align-items:center}
+.nav-logo{display:flex;align-items:center;gap:8px;font-size:18px;font-weight:800;color:#00d4ff}
+.nav-logo span{font-size:24px}
+.nav-badge{background:linear-gradient(135deg,#ffd700,#ff9800);color:#000;padding:4px 10px;border-radius:12px;font-size:10px;font-weight:700;letter-spacing:0.5px}
+
+/* HERO */
+.hero{position:relative;padding:50px 20px 40px;text-align:center;overflow:hidden}
+.hero::before{content:'';position:absolute;top:-50%;left:-50%;width:200%;height:200%;background:radial-gradient(circle,rgba(0,212,255,0.08) 0%,transparent 50%);animation:heroGlow 8s ease-in-out infinite}
+@keyframes heroGlow{0%,100%{transform:scale(1)}50%{transform:scale(1.1)}}
+.hero-content{position:relative;z-index:1}
+.hero-badge{display:inline-block;background:rgba(0,212,255,0.1);border:1px solid rgba(0,212,255,0.3);color:#00d4ff;padding:6px 16px;border-radius:20px;font-size:11px;font-weight:600;margin-bottom:20px;letter-spacing:0.5px}
+.hero h1{font-size:32px;font-weight:800;background:linear-gradient(135deg,#00d4ff,#7c3aed);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:12px;line-height:1.2}
+.hero p{color:#8b949e;font-size:15px;max-width:400px;margin:0 auto 30px}
+.hero-cta{display:inline-block;background:linear-gradient(135deg,#00d4ff,#0099cc);color:#000;padding:16px 40px;border-radius:30px;text-decoration:none;font-weight:700;font-size:16px;box-shadow:0 8px 30px rgba(0,212,255,0.3);transition:all 0.3s;animation:ctaPulse 2s ease-in-out infinite}
+@keyframes ctaPulse{0%,100%{box-shadow:0 8px 30px rgba(0,212,255,0.3)}50%{box-shadow:0 8px 40px rgba(0,212,255,0.5)}}
+.hero-cta:active{transform:scale(0.95)}
+
+/* STATS BAR */
+.stats-bar{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:#1a2540;margin:0 20px;border-radius:12px;overflow:hidden;border:1px solid #1a2540}
+.stat{background:#0d1320;padding:20px 10px;text-align:center}
+.stat-num{font-size:22px;font-weight:800;color:#00d4ff;margin-bottom:4px}
+.stat-label{font-size:10px;color:#8b949e;text-transform:uppercase;letter-spacing:1px}
+
+/* FEATURES */
+.section{padding:40px 20px}
+.section-title{font-size:20px;font-weight:700;color:#fff;margin-bottom:8px;text-align:center}
+.section-subtitle{font-size:13px;color:#8b949e;text-align:center;margin-bottom:25px}
+.features-grid{display:grid;grid-template-columns:1fr;gap:12px}
+.feature{background:#0d1320;border:1px solid #1a2540;border-radius:12px;padding:18px;display:flex;gap:14px;align-items:flex-start;transition:all 0.3s}
+.feature:active{transform:scale(0.98);border-color:#00d4ff}
+.feature-icon{width:44px;height:44px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:22px;flex-shrink:0}
+.feature-icon.blue{background:rgba(0,212,255,0.1);color:#00d4ff}
+.feature-icon.purple{background:rgba(124,58,237,0.1);color:#7c3aed}
+.feature-icon.green{background:rgba(34,197,94,0.1);color:#22c55e}
+.feature-icon.orange{background:rgba(255,152,0,0.1);color:#ff9800}
+.feature-content h3{font-size:14px;font-weight:600;color:#fff;margin-bottom:4px}
+.feature-content p{font-size:12px;color:#8b949e;line-height:1.5}
+
+/* COINS */
+.coins-row{display:flex;gap:8px;overflow-x:auto;padding:10px 0;scrollbar-width:none}
+.coins-row::-webkit-scrollbar{display:none}
+.coin-pill{background:#0d1320;border:1px solid #1a2540;border-radius:20px;padding:8px 14px;display:flex;align-items:center;gap:6px;white-space:nowrap;flex-shrink:0}
+.coin-pill-icon{font-size:16px}
+.coin-pill-name{font-size:12px;font-weight:600;color:#e0e0e0}
+.coin-pill-price{font-size:11px;color:#22c55e}
+
+/* SPONSORS */
+.sponsors-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.sponsor-mini{background:#0d1320;border:1px solid #1a2540;border-radius:10px;padding:14px;text-align:center;text-decoration:none;transition:all 0.3s}
+.sponsor-mini:active{transform:scale(0.97);border-color:#00d4ff}
+.sponsor-mini-icon{font-size:28px;margin-bottom:6px}
+.sponsor-mini-name{font-size:11px;font-weight:600;color:#e0e0e0}
+.sponsor-mini-desc{font-size:9px;color:#8b949e;margin-top:2px}
+
+/* TIMER */
+.timer-section{padding:30px 20px;text-align:center}
+.timer-card{background:linear-gradient(135deg,#0d1320 0%,#101830 100%);border:1px solid #1a2540;border-radius:16px;padding:30px 20px;position:relative;overflow:hidden}
+.timer-card::before{content:'';position:absolute;top:-50%;right:-30%;width:200px;height:200px;background:radial-gradient(circle,rgba(0,212,255,0.1) 0%,transparent 70%)}
+.timer-label{font-size:13px;color:#8b949e;margin-bottom:15px;position:relative}
+.timer-circle{width:80px;height:80px;margin:0 auto 15px;position:relative;display:flex;align-items:center;justify-content:center}
+.timer-circle svg{position:absolute;width:100%;height:100%;transform:rotate(-90deg)}
+.timer-circle circle{fill:none;stroke-width:4}
+.timer-bg{stroke:#1a2540}
+.timer-progress{stroke:#00d4ff;stroke-linecap:round;transition:stroke-dashoffset 1s linear}
+.timer-num{font-size:32px;font-weight:800;color:#00d4ff;position:relative;z-index:1}
+.claimed-card{background:linear-gradient(135deg,rgba(34,197,94,0.1) 0%,rgba(13,19,32,0.9) 100%);border:1px solid #22c55e;border-radius:16px;padding:30px 20px;text-align:center;display:none}
+.claimed-card.show{display:block;animation:claimedPop 0.5s ease}
+@keyframes claimedPop{0%{transform:scale(0.8);opacity:0}100%{transform:scale(1);opacity:1}}
+.claimed-icon{font-size:60px;margin-bottom:12px;animation:bounceIn 0.6s ease}
+@keyframes bounceIn{0%{transform:scale(0)}60%{transform:scale(1.2)}100%{transform:scale(1)}}
+.claimed-title{font-size:20px;font-weight:700;color:#22c55e;margin-bottom:8px}
+.claimed-text{font-size:13px;color:#8b949e;line-height:1.5;margin-bottom:20px}
+.claimed-reward{background:rgba(255,215,0,0.1);border:1px solid rgba(255,215,0,0.3);border-radius:10px;padding:10px;margin-bottom:20px}
+.claimed-reward strong{color:#ffd700;font-size:16px}
+
+/* FOOTER */
+.footer{margin-top:auto;background:#06090f;border-top:1px solid #1a2540;padding:25px 20px;text-align:center}
+.footer-logo{font-size:16px;font-weight:700;color:#00d4ff;margin-bottom:8px}
+.footer-text{font-size:11px;color:#555;line-height:1.6;margin-bottom:15px}
+.footer-links{display:flex;justify-content:center;gap:15px;flex-wrap:wrap;margin-bottom:15px}
+.footer-links a{color:#8b949e;text-decoration:none;font-size:11px;transition:color 0.2s}
+.footer-links a:active{color:#00d4ff}
+.footer-powered{font-size:10px;color:#444;border-top:1px solid #1a2540;padding-top:15px}
+.footer-powered a{color:#ffd700;text-decoration:none;font-weight:600}
+
+/* BACK BTN */
+.back-btn{display:flex;align-items:center;justify-content:center;gap:8px;background:rgba(255,215,0,0.1);border:1px solid rgba(255,215,0,0.3);color:#ffd700;padding:14px 20px;border-radius:12px;text-decoration:none;font-weight:700;font-size:14px;margin:0 20px 20px;transition:all 0.3s}
+.back-btn:active{transform:scale(0.97);background:rgba(255,215,0,0.2)}
+
+/* RESPONSIVE */
+@media(max-width:380px){.hero h1{font-size:26px}.stat-num{font-size:18px}.sponsors-grid{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
 <div class="container">
-  <div class="header">
-    <div class="logo">🦏</div>
-    <h1 class="title">Nuestro Patrocinador</h1>
-    <p class="subtitle">Visita a nuestros socios y gana $KABUTO</p>
-  </div>
 
-  <div class="sponsor-card">
-    <span class="sponsor-badge">💎 PATROCINADOR OFICIAL</span>
-    <h2 class="sponsor-name">CryptoExchange Pro</h2>
-    <p class="sponsor-desc">
-      La plataforma de intercambio de criptomonedas más segura y rápida.
-      Compra, vende e intercambia tus criptomonedas favoritas con las
-      comisiones más bajas del mercado.
-    </p>
-    <a href="https://example.com/sponsor" target="_blank" class="sponsor-link">
-      🌐 Visitar CryptoExchange Pro
-    </a>
-  </div>
-
-  <div class="ads-container">
-    <div class="ads-title">📢 Otros socios</div>
-    <div class="ad-item">
-      <a href="https://example.com/ad1" target="_blank">📱 Wallet Pro - Tu billetera segura</a>
-      <p>Almacena todas tus criptomonedas en un solo lugar</p>
+  <!-- NAVBAR -->
+  <nav class="navbar">
+    <div class="nav-logo">
+      <span>🔷</span> CryptoHub
     </div>
-    <div class="ad-item">
-      <a href="https://example.com/ad2" target="_blank">🎮 CryptoGames - Juega y gana</a>
-      <p>Los mejores juegos blockchain del momento</p>
+    <div class="nav-badge">PATROCINADOR OFICIAL</div>
+  </nav>
+
+  <!-- HERO -->
+  <section class="hero">
+    <div class="hero-content">
+      <div class="hero-badge">⚡ Plataforma #1 en Cripto</div>
+      <h1>Compra, Vende y<br>Almacena Criptomonedas</h1>
+      <p>Únete a más de 2 millones de usuarios que ya confían en CryptoHub para sus transacciones diarias con las comisiones más bajas.</p>
+      <a href="https://example.com/cryptohub" target="_blank" class="hero-cta">🚀 Comenzar Ahora</a>
     </div>
-    <div class="ad-item">
-      <a href="https://example.com/ad3" target="_blank">📊 TradingView - Análisis profesional</a>
-      <p>Herramientas de análisis técnico para traders</p>
+  </section>
+
+  <!-- STATS -->
+  <div class="stats-bar">
+    <div class="stat"><div class="stat-num">2M+</div><div class="stat-label">Usuarios</div></div>
+    <div class="stat"><div class="stat-num">$5B</div><div class="stat-label">Volumen</div></div>
+    <div class="stat"><div class="stat-num">0.1%</div><div class="stat-label">Comisión</div></div>
+  </div>
+
+  <!-- COINS -->
+  <section class="section">
+    <h2 class="section-title">Precios en Tiempo Real</h2>
+    <p class="section-subtitle">Las criptomonedas más populares disponibles</p>
+    <div class="coins-row">
+      <div class="coin-pill"><span class="coin-pill-icon">🟢</span><span class="coin-pill-name">USDT</span><span class="coin-pill-price">$1.00</span></div>
+      <div class="coin-pill"><span class="coin-pill-icon">🟡</span><span class="coin-pill-name">BNB</span><span class="coin-pill-price">$412.50</span></div>
+      <div class="coin-pill"><span class="coin-pill-icon">☀️</span><span class="coin-pill-name">SOL</span><span class="coin-pill-price">$98.30</span></div>
+      <div class="coin-pill"><span class="coin-pill-icon">🪙</span><span class="coin-pill-name">LTC</span><span class="coin-pill-price">$72.15</span></div>
+      <div class="coin-pill"><span class="coin-pill-icon">🔴</span><span class="coin-pill-name">TRX</span><span class="coin-pill-price">$0.12</span></div>
+      <div class="coin-pill"><span class="coin-pill-icon">🐕</span><span class="coin-pill-name">DOGE</span><span class="coin-pill-price">$0.08</span></div>
+      <div class="coin-pill"><span class="coin-pill-icon">🔵</span><span class="coin-pill-name">USDC</span><span class="coin-pill-price">$1.00</span></div>
     </div>
-  </div>
+  </section>
 
-  <div id="timerBox" class="timer-box">
-    <p class="timer-text">⏳ Espera para confirmar tu visita...</p>
-    <div id="timerCount" class="timer-count">5</div>
-  </div>
+  <!-- FEATURES -->
+  <section class="section" style="padding-top:10px">
+    <h2 class="section-title">¿Por qué CryptoHub?</h2>
+    <p class="section-subtitle">La plataforma más segura y rápida del mercado</p>
+    <div class="features-grid">
+      <div class="feature">
+        <div class="feature-icon blue">🔒</div>
+        <div class="feature-content"><h3>Seguridad de Nivel Bancario</h3><p>Cifrado AES-256, autenticación de dos factores y almacenamiento en frío para el 95% de los fondos.</p></div>
+      </div>
+      <div class="feature">
+        <div class="feature-icon green">⚡</div>
+        <div class="feature-content"><h3>Transacciones Instantáneas</h3><p>Compra y vende en segundos. Retiros procesados en menos de 5 minutos.</p></div>
+      </div>
+      <div class="feature">
+        <div class="feature-icon purple">💰</div>
+        <div class="feature-content"><h3>Comisiones Más Bajas</h3><p>Solo 0.1% por transacción. Sin comisiones ocultas. Sin costos de retiro en la mayoría de monedas.</p></div>
+      </div>
+      <div class="feature">
+        <div class="feature-icon orange">📱</div>
+        <div class="feature-content"><h3>App Móvil Disponible</h3><p>Disponible en iOS y Android. Gestiona tus criptomonedas desde cualquier lugar, en cualquier momento.</p></div>
+      </div>
+    </div>
+  </section>
 
-  <div id="claimedBox" class="claimed-box">
-    <div class="claimed-icon">✅</div>
-    <p class="claimed-text">¡Visita confirmada!</p>
-    <p style="color:#8b949e;font-size:14px;margin-top:10px;">Ya puedes volver a Kabuto Miner y reclamar tu recompensa</p>
-  </div>
+  <!-- SPONSORS -->
+  <section class="section" style="padding-top:10px">
+    <h2 class="section-title">Nuestros Socios</h2>
+    <p class="section-subtitle">Plataformas confiables que recomendamos</p>
+    <div class="sponsors-grid">
+      <a href="https://example.com/wallet" target="_blank" class="sponsor-mini">
+        <div class="sponsor-mini-icon">👛</div>
+        <div class="sponsor-mini-name">SafeWallet</div>
+        <div class="sponsor-mini-desc">Wallet segura</div>
+      </a>
+      <a href="https://example.com/games" target="_blank" class="sponsor-mini">
+        <div class="sponsor-mini-icon">🎮</div>
+        <div class="sponsor-mini-name">Play2Earn</div>
+        <div class="sponsor-mini-desc">Juegos crypto</div>
+      </a>
+      <a href="https://example.com/trade" target="_blank" class="sponsor-mini">
+        <div class="sponsor-mini-icon">📊</div>
+        <div class="sponsor-mini-name">TradePro</div>
+        <div class="sponsor-mini-desc">Trading tools</div>
+      </a>
+      <a href="https://example.com/stake" target="_blank" class="sponsor-mini">
+        <div class="sponsor-mini-icon">🌱</div>
+        <div class="sponsor-mini-name">StakePool</div>
+        <div class="sponsor-mini-desc">Staking rewards</div>
+      </a>
+    </div>
+  </section>
 
+  <!-- TIMER -->
+  <section class="timer-section">
+    <div id="timerCard" class="timer-card">
+      <p class="timer-label">⏳ Confirmando tu visita...</p>
+      <div class="timer-circle">
+        <svg viewBox="0 0 80 80">
+          <circle class="timer-bg" cx="40" cy="40" r="36"></circle>
+          <circle id="timerProgress" class="timer-progress" cx="40" cy="40" r="36" stroke-dasharray="226" stroke-dashoffset="0"></circle>
+        </svg>
+        <div id="timerNum" class="timer-num">5</div>
+      </div>
+      <p style="font-size:12px;color:#555">Mantén esta página abierta para confirmar</p>
+    </div>
+
+    <div id="claimedCard" class="claimed-card">
+      <div class="claimed-icon">✅</div>
+      <h2 class="claimed-title">¡Visita Confirmada!</h2>
+      <p class="claimed-text">Has visitado a nuestro patrocinador oficial. Tu recompensa está lista para ser reclamada.</p>
+      <div class="claimed-reward">
+        <strong>+200 $KABUTO</strong>
+      </div>
+    </div>
+  </section>
+
+  <!-- BACK -->
   <a href="https://t.me/Kabutominer_bot" class="back-btn">
     🦏 Volver a Kabuto Miner
   </a>
+
+  <!-- FOOTER -->
+  <footer class="footer">
+    <div class="footer-logo">🔷 CryptoHub</div>
+    <p class="footer-text">CryptoHub es una plataforma de intercambio de criptomonedas registrada. Operamos bajo estrictas normativas de seguridad y cumplimiento.</p>
+    <div class="footer-links">
+      <a href="#">Términos</a>
+      <a href="#">Privacidad</a>
+      <a href="#">Seguridad</a>
+      <a href="#">Soporte</a>
+    </div>
+    <div class="footer-powered">
+      🔷 Patrocinador oficial de <a href="https://t.me/Kabutominer_bot">Kabuto Miner</a>
+    </div>
+  </footer>
+
 </div>
 
 <script>
   let secondsLeft = 5;
-  const timerEl = document.getElementById('timerCount');
-  const timerBox = document.getElementById('timerBox');
-  const claimedBox = document.getElementById('claimedBox');
+  const totalSeconds = 5;
+  const circumference = 226;
+  const timerNum = document.getElementById('timerNum');
+  const timerCard = document.getElementById('timerCard');
+  const claimedCard = document.getElementById('claimedCard');
+  const timerProgress = document.getElementById('timerProgress');
   const tg = '${telegramId}';
 
   const interval = setInterval(() => {
     secondsLeft--;
+    const progress = (secondsLeft / totalSeconds) * circumference;
+    timerProgress.style.strokeDashoffset = circumference - progress;
+    timerNum.textContent = secondsLeft > 0 ? secondsLeft : '✓';
+
     if (secondsLeft <= 0) {
       clearInterval(interval);
-      timerBox.style.display = 'none';
-      claimedBox.classList.add('show');
-      // Notificar al servidor (opcional, para tracking)
+      timerCard.style.display = 'none';
+      claimedCard.classList.add('show');
       if (tg) {
         fetch('/api/sponsor_visit?tg=' + tg).catch(() => {});
       }
-    } else {
-      timerEl.textContent = secondsLeft;
     }
   }, 1000);
 </script>
@@ -1170,7 +1336,7 @@ body { background:#0d1117; color:#fff; font-family:-apple-system,BlinkMacSystemF
 app.get('/api/sponsor_visit', async (req, res) => {
   try {
     const tg = req.query.tg;
-    if (tg) console.log(`📢 Visita al patrocinador: ${tg}`);
+    if (tg) console.log('📢 Visita al patrocinador: ' + tg);
     res.json({ success: true });
   } catch (e) { res.json({ success: true }); }
 });
