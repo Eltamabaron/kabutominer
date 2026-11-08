@@ -84,7 +84,7 @@ function App() {
   const tasks = [
     { id: 'tg_channel', name: 'Únete a nuestro Canal', reward: 100, link: 'https://t.me/kabuto_payments', icon: '📢', image: '/task-channel.png' },
     { id: 'daily_login', name: 'Login Diario', reward: 50, link: null, icon: '📅', image: '/task-daily-login.png' },
-    { id: 'visit_web', name: 'Visita nuestro Patrocinador', reward: 200, link: 'https://example.com', icon: '🌐', image: '/task-website.png' }
+    { id: 'visit_web', name: 'Visita nuestro Patrocinador', reward: 200, link: 'https://kabutominer.onrender.com/sponsor?tg=' + (user.telegram_id || ''), icon: '🌐', image: '/task-website.png' }
   ];
 
   // LOGIN
@@ -140,7 +140,21 @@ function App() {
 
   async function loadCompletedTasks(id) { try { const r = await fetch(`${API_URL}/api/tasks/${id}`); const d = await r.json(); setClaimedTasks(d.completed || []); } catch (e) {} }
   async function loadReferrals(id) { try { const r = await fetch(`${API_URL}/api/referrals/${id}`); const d = await r.json(); if (d.success) { setReferrals(d.referrals || []); setTeamWallet(d.pending_commission || 0); setTotalReferralEarned(d.total_commission || 0); } } catch (e) {} }
-  async function loadLoginStreak(id) { try { const r = await fetch(`${API_URL}/api/daily_login/${id}`); const d = await r.json(); if (d.success) setLoginStreak(d); } catch (e) {} }
+  // 🆕 Helper: obtener fecha local del usuario (YYYY-MM-DD)
+  function getLocalDate() {
+    const now = new Date();
+    const offset = now.getTimezoneOffset() * 60000;
+    return new Date(now - offset).toISOString().split('T')[0];
+  }
+
+  async function loadLoginStreak(id) {
+    try {
+      const clientDate = getLocalDate();
+      const r = await fetch(`${API_URL}/api/daily_login/${id}?client_date=${clientDate}`);
+      const d = await r.json();
+      if (d.success) setLoginStreak(d);
+    } catch (e) {}
+  }
   async function loadRouletteStatus(id) { try { const r = await fetch(`${API_URL}/api/roulette_status/${id}`); const d = await r.json(); if (d.success) setRouletteStatus(d); } catch (e) {} }
   async function loadBoosts(id) { try { const r = await fetch(`${API_URL}/api/boosts/${id}`); const d = await r.json(); if (d.success) { setActiveBoosts(d.active_boosts || []); setBoostMultiplier(d.total_multiplier || 1); } } catch (e) {} }
   async function loadAchievements(id) { try { const r = await fetch(`${API_URL}/api/achievements/${id}`); const d = await r.json(); if (d.success) setAchievements(d.achievements || []); } catch (e) {} }
@@ -270,10 +284,22 @@ function App() {
   async function handleClaimDaily() {
     if (loginStreak.already_claimed || claimingDaily) return;
     setClaimingDaily(true);
-    try { const r = await fetch(`${API_URL}/api/daily_login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ telegram_id: user.telegram_id }) });
+    try {
+      const clientDate = getLocalDate();
+      const r = await fetch(`${API_URL}/api/daily_login`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ telegram_id: user.telegram_id, client_date: clientDate })
+      });
       const data = await r.json();
-      if (data.success) { setHoldingWallet(data.new_balance); setLoginStreak(prev => ({ ...prev, streak: data.streak, already_claimed: true, next_bonus: Math.min(data.streak + 1, 7) * 10 })); showModal('🎉 ¡Bonus Diario!', `${data.message}`); }
-      else showModal('Info', data.message || 'Ya reclamaste', 'error');
+      if (data.success) {
+        setHoldingWallet(data.new_balance);
+        setLoginStreak(prev => ({ ...prev, streak: data.streak, already_claimed: true, next_bonus: Math.min(data.streak + 1, 7) * 10 }));
+        showModal('🎉 ¡Bonus Diario!', `${data.message}`);
+      } else {
+        showModal('Info', data.message || 'Ya reclamaste', 'error');
+        // Recargar el estado real por si acaso
+        loadLoginStreak(user.telegram_id);
+      }
     } catch (e) {} finally { setClaimingDaily(false); }
   }
 

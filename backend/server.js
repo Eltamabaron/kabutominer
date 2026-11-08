@@ -568,7 +568,7 @@ app.post('/api/claim_team_wallet', async (req, res) => {
 });
 
 // =====================================================
-// API: LOGIN STREAK (bonus diario)
+// API: LOGIN STREAK (bonus diario) - FIX ZONA HORARIA
 // =====================================================
 app.post('/api/daily_login', async (req, res) => {
   try {
@@ -578,22 +578,62 @@ app.post('/api/daily_login', async (req, res) => {
     const { data: user } = await supabase.from('users').select('*').eq('telegram_id', telegram_id).single();
     if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
 
-    const today = new Date().toISOString().split('T')[0];
-    if (user.last_login_date === today) return res.json({ success: false, already_claimed: true, streak: user.last_login_streak || 0, message: 'Ya reclamaste hoy' });
+    // 🆕 FIX: Usar fecha local del usuario (Cuba = America/Havana)
+    // El cliente enviará su fecha local para evitar problemas de zona horaria
+    const clientToday = req.body.client_date || new Date().toISOString().split('T')[0];
 
-    let newStreak = 1;
-    if (user.last_login_date) {
-      const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1);
-      if (user.last_login_date === yesterday.toISOString().split('T')[0]) newStreak = (user.last_login_streak || 0) + 1;
+    if (user.last_login_date === clientToday) {
+      return res.json({
+        success: false,
+        already_claimed: true,
+        streak: user.last_login_streak || 0,
+        message: 'Ya reclamaste hoy'
+      });
     }
 
+    // 🆕 FIX: Calcular si el último login fue "ayer" (en ventana de 20-28 horas)
+    let newStreak = 1;
+    if (user.last_login_date) {
+      const lastLogin = new Date(user.last_login_date + 'T00:00:00');
+      const todayDate = new Date(clientToday + 'T00:00:00');
+      const diffHours = (todayDate - lastLogin) / (1000 * 60 * 60);
+
+      // Si la diferencia es entre 20 y 28 horas, es "ayer" (racha continúa)
+      if (diffHours >= 20 && diffHours <= 28) {
+        newStreak = (user.last_login_streak || 0) + 1;
+      } else if (diffHours < 20) {
+        // Mismo día (por diferencia de zona horaria), no incrementar
+        return res.json({
+          success: false,
+          already_claimed: true,
+          streak: user.last_login_streak || 0,
+          message: 'Ya reclamaste hoy'
+        });
+      } else {
+        // Más de 28 horas, racha reiniciada
+        newStreak = 1;
+      }
+    }
+
+    // Máximo streak de 7 días, luego se reinicia el bonus pero mantiene el contador
     const streakBonus = Math.min(newStreak, 7) * 10;
     const newBalance = (user.balance || 0) + streakBonus;
-    await supabase.from('users').update({ balance: newBalance, last_login_streak: newStreak, last_login_date: today }).eq('telegram_id', telegram_id);
+
+    await supabase.from('users').update({
+      balance: newBalance,
+      last_login_streak: newStreak,
+      last_login_date: clientToday
+    }).eq('telegram_id', telegram_id);
 
     await checkAchievements(telegram_id);
 
-    res.json({ success: true, streak: newStreak, bonus: streakBonus, new_balance: newBalance, message: `¡Bonus diario! Día ${newStreak}: +${streakBonus} $KABUTO` });
+    res.json({
+      success: true,
+      streak: newStreak,
+      bonus: streakBonus,
+      new_balance: newBalance,
+      message: `¡Bonus diario! Día ${newStreak}: +${streakBonus} $KABUTO`
+    });
   } catch (err) { console.error('Error daily_login:', err); res.status(500).json({ error: 'Error' }); }
 });
 
@@ -601,8 +641,28 @@ app.get('/api/daily_login/:telegram_id', async (req, res) => {
   try {
     const { data: user } = await supabase.from('users').select('last_login_streak, last_login_date').eq('telegram_id', req.params.telegram_id).single();
     if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
-    const today = new Date().toISOString().split('T')[0];
-    res.json({ success: true, streak: user.last_login_streak || 0, already_claimed: user.last_login_date === today, next_bonus: Math.min((user.last_login_streak || 0) + 1, 7) * 10 });
+
+    // 🆕 FIX: Permitir pasar client_date por query param
+    const today = req.query.client_date || new Date().toISOString().split('T')[0];
+    const alreadyClaimed = user.last_login_date === today;
+
+    // Calcular next_bonus correctamente
+    let nextBonus;
+    if (alreadyClaimed) {
+      // Si ya reclamó hoy, mostrar bonus de mañana
+      nextBonus = Math.min((user.last_login_streak || 0) + 1, 7) * 10;
+    } else {
+      // Si no ha reclamado, mostrar bonus de hoy
+      nextBonus = Math.min((user.last_login_streak || 0) + 1, 7) * 10;
+    }
+
+    res.json({
+      success: true,
+      streak: user.last_login_streak || 0,
+      already_claimed: alreadyClaimed,
+      last_login_date: user.last_login_date,
+      next_bonus: nextBonus
+    });
   } catch (err) { res.status(500).json({ error: 'Error' }); }
 });
 
@@ -983,6 +1043,136 @@ app.get('/success', (req, res) => {
 
 app.get('/fail', (req, res) => {
   res.send(`<html><body style="background:#0d1117;color:#fff;font-family:Arial;text-align:center;padding:50px"><h1 style="color:#f85149">❌ Pago Fallido</h1></body></html>`);
+});
+
+// =====================================================
+// 🆕 PÁGINA DEL PATROCINADOR (tarea de visitar web)
+// =====================================================
+app.get('/sponsor', (req, res) => {
+  const telegramId = req.query.tg || '';
+  res.send(`<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kabuto Miner - Patrocinador</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:#0d1117; color:#fff; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Arial,sans-serif; min-height:100vh; }
+.container { max-width:500px; margin:0 auto; padding:20px; min-height:100vh; display:flex; flex-direction:column; }
+.header { text-align:center; padding:20px 0; border-bottom:1px solid #30363d; margin-bottom:20px; }
+.logo { font-size:48px; }
+.title { color:#ffd700; font-size:24px; margin:10px 0 5px; }
+.subtitle { color:#8b949e; font-size:14px; }
+.sponsor-card { background:#161b22; border:1px solid #30363d; border-radius:12px; padding:20px; margin:20px 0; text-align:center; }
+.sponsor-badge { background:rgba(255,215,0,0.1); color:#ffd700; padding:5px 15px; border-radius:20px; font-size:12px; font-weight:bold; display:inline-block; margin-bottom:15px; border:1px solid rgba(255,215,0,0.2); }
+.sponsor-name { font-size:20px; font-weight:bold; color:#fff; margin:10px 0; }
+.sponsor-desc { color:#8b949e; font-size:14px; line-height:1.5; margin-bottom:20px; }
+.sponsor-link { display:block; background:#00a8ff; color:#fff; padding:15px; border-radius:8px; text-decoration:none; font-weight:bold; margin-top:15px; transition:transform 0.1s; }
+.sponsor-link:active { transform:scale(0.96); }
+.timer-box { background:rgba(35,134,54,0.1); border:1px solid #238636; border-radius:10px; padding:20px; margin:20px 0; text-align:center; }
+.timer-text { font-size:16px; color:#3fb950; margin-bottom:10px; }
+.timer-count { font-size:48px; font-weight:bold; color:#3fb950; }
+.claimed-box { background:rgba(63,185,80,0.1); border:1px solid #3fb950; border-radius:10px; padding:20px; margin:20px 0; text-align:center; display:none; }
+.claimed-box.show { display:block; }
+.claimed-icon { font-size:60px; margin-bottom:10px; }
+.claimed-text { color:#3fb950; font-size:18px; font-weight:bold; }
+.back-btn { background:rgba(255,255,255,0.1); border:1px solid #444; color:#fff; padding:12px 20px; border-radius:8px; text-decoration:none; font-weight:bold; text-align:center; display:block; margin-top:auto; }
+.back-btn:active { transform:scale(0.96); }
+.ads-container { background:#161b22; border:1px solid #30363d; border-radius:10px; padding:15px; margin:15px 0; }
+.ads-title { color:#8b949e; font-size:12px; text-transform:uppercase; margin-bottom:10px; }
+.ad-item { padding:10px; border-bottom:1px solid #30363d; }
+.ad-item:last-child { border-bottom:none; }
+.ad-item a { color:#00a8ff; text-decoration:none; font-size:14px; }
+.ad-item p { color:#8b949e; font-size:12px; margin-top:5px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="logo">🦏</div>
+    <h1 class="title">Nuestro Patrocinador</h1>
+    <p class="subtitle">Visita a nuestros socios y gana $KABUTO</p>
+  </div>
+
+  <div class="sponsor-card">
+    <span class="sponsor-badge">💎 PATROCINADOR OFICIAL</span>
+    <h2 class="sponsor-name">CryptoExchange Pro</h2>
+    <p class="sponsor-desc">
+      La plataforma de intercambio de criptomonedas más segura y rápida.
+      Compra, vende e intercambia tus criptomonedas favoritas con las
+      comisiones más bajas del mercado.
+    </p>
+    <a href="https://example.com/sponsor" target="_blank" class="sponsor-link">
+      🌐 Visitar CryptoExchange Pro
+    </a>
+  </div>
+
+  <div class="ads-container">
+    <div class="ads-title">📢 Otros socios</div>
+    <div class="ad-item">
+      <a href="https://example.com/ad1" target="_blank">📱 Wallet Pro - Tu billetera segura</a>
+      <p>Almacena todas tus criptomonedas en un solo lugar</p>
+    </div>
+    <div class="ad-item">
+      <a href="https://example.com/ad2" target="_blank">🎮 CryptoGames - Juega y gana</a>
+      <p>Los mejores juegos blockchain del momento</p>
+    </div>
+    <div class="ad-item">
+      <a href="https://example.com/ad3" target="_blank">📊 TradingView - Análisis profesional</a>
+      <p>Herramientas de análisis técnico para traders</p>
+    </div>
+  </div>
+
+  <div id="timerBox" class="timer-box">
+    <p class="timer-text">⏳ Espera para confirmar tu visita...</p>
+    <div id="timerCount" class="timer-count">5</div>
+  </div>
+
+  <div id="claimedBox" class="claimed-box">
+    <div class="claimed-icon">✅</div>
+    <p class="claimed-text">¡Visita confirmada!</p>
+    <p style="color:#8b949e;font-size:14px;margin-top:10px;">Ya puedes volver a Kabuto Miner y reclamar tu recompensa</p>
+  </div>
+
+  <a href="https://t.me/Kabutominer_bot" class="back-btn">
+    🦏 Volver a Kabuto Miner
+  </a>
+</div>
+
+<script>
+  let secondsLeft = 5;
+  const timerEl = document.getElementById('timerCount');
+  const timerBox = document.getElementById('timerBox');
+  const claimedBox = document.getElementById('claimedBox');
+  const tg = '${telegramId}';
+
+  const interval = setInterval(() => {
+    secondsLeft--;
+    if (secondsLeft <= 0) {
+      clearInterval(interval);
+      timerBox.style.display = 'none';
+      claimedBox.classList.add('show');
+      // Notificar al servidor (opcional, para tracking)
+      if (tg) {
+        fetch('/api/sponsor_visit?tg=' + tg).catch(() => {});
+      }
+    } else {
+      timerEl.textContent = secondsLeft;
+    }
+  }, 1000);
+</script>
+</body>
+</html>`);
+});
+
+// 🆕 Endpoint para tracking de visitas al patrocinador
+app.get('/api/sponsor_visit', async (req, res) => {
+  try {
+    const tg = req.query.tg;
+    if (tg) console.log(`📢 Visita al patrocinador: ${tg}`);
+    res.json({ success: true });
+  } catch (e) { res.json({ success: true }); }
 });
 
 app.get('/transparency', (req, res) => {
