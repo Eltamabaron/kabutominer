@@ -1046,7 +1046,7 @@ app.get('/fail', (req, res) => {
 });
 
 // =====================================================
-// 🆕 PÁGINA DEL PATROCINADOR (tarea de visitar web) - PROFESIONAL
+// 🆕 PÁGINA DEL PATROCINADOR (Plisio) - PROFESIONAL
 // =====================================================
 app.get('/sponsor', (req, res) => {
   const telegramId = req.query.tg || '';
@@ -1055,25 +1055,17 @@ app.get('/sponsor', (req, res) => {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>CryptoHub - Exchange & Wallet | Patrocinador Oficial de Kabuto Miner</title>
-<meta name="description" content="CryptoHub - La plataforma líder en intercambio de criptomonedas. Compra, vende y almacena tus criptomonedas favoritas con seguridad.">
+<title>Plisio - Crypto Payment Gateway | Patrocinador Oficial de Kabuto Miner</title>
+<meta name="description" content="Plisio - La pasarela de pago en criptomonedas líder. Acepta más de 50 criptomonedas en tu negocio con comisiones bajas.">
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:#0a0e17;color:#e0e0e0;font-family:'Segoe UI',-apple-system,BlinkMacSystemFont,Roboto,Arial,sans-serif;line-height:1.6;overflow-x:hidden}
-
-/* SCROLLBAR */
 ::-webkit-scrollbar{width:8px}::-webkit-scrollbar-track{background:#0a0e17}::-webkit-scrollbar-thumb{background:#1a2540;border-radius:4px}
-
-/* CONTAINER */
 .container{max-width:600px;margin:0 auto;min-height:100vh;display:flex;flex-direction:column}
-
-/* NAVBAR */
 .navbar{position:sticky;top:0;z-index:100;background:rgba(10,14,23,0.95);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border-bottom:1px solid #1a2540;padding:15px 20px;display:flex;justify-content:space-between;align-items:center}
 .nav-logo{display:flex;align-items:center;gap:8px;font-size:18px;font-weight:800;color:#00d4ff}
 .nav-logo span{font-size:24px}
 .nav-badge{background:linear-gradient(135deg,#ffd700,#ff9800);color:#000;padding:4px 10px;border-radius:12px;font-size:10px;font-weight:700;letter-spacing:0.5px}
-
-/* HERO */
 .hero{position:relative;padding:50px 20px 40px;text-align:center;overflow:hidden}
 .hero::before{content:'';position:absolute;top:-50%;left:-50%;width:200%;height:200%;background:radial-gradient(circle,rgba(0,212,255,0.08) 0%,transparent 50%);animation:heroGlow 8s ease-in-out infinite}
 @keyframes heroGlow{0%,100%{transform:scale(1)}50%{transform:scale(1.1)}}
@@ -1084,14 +1076,10 @@ body{background:#0a0e17;color:#e0e0e0;font-family:'Segoe UI',-apple-system,Blink
 .hero-cta{display:inline-block;background:linear-gradient(135deg,#00d4ff,#0099cc);color:#000;padding:16px 40px;border-radius:30px;text-decoration:none;font-weight:700;font-size:16px;box-shadow:0 8px 30px rgba(0,212,255,0.3);transition:all 0.3s;animation:ctaPulse 2s ease-in-out infinite}
 @keyframes ctaPulse{0%,100%{box-shadow:0 8px 30px rgba(0,212,255,0.3)}50%{box-shadow:0 8px 40px rgba(0,212,255,0.5)}}
 .hero-cta:active{transform:scale(0.95)}
-
-/* STATS BAR */
 .stats-bar{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:#1a2540;margin:0 20px;border-radius:12px;overflow:hidden;border:1px solid #1a2540}
 .stat{background:#0d1320;padding:20px 10px;text-align:center}
 .stat-num{font-size:22px;font-weight:800;color:#00d4ff;margin-bottom:4px}
 .stat-label{font-size:10px;color:#8b949e;text-transform:uppercase;letter-spacing:1px}
-
-/* FEATURES */
 .section{padding:40px 20px}
 .section-title{font-size:20px;font-weight:700;color:#fff;margin-bottom:8px;text-align:center}
 .section-subtitle{font-size:13px;color:#8b949e;text-align:center;margin-bottom:25px}
@@ -1105,24 +1093,18 @@ body{background:#0a0e17;color:#e0e0e0;font-family:'Segoe UI',-apple-system,Blink
 .feature-icon.orange{background:rgba(255,152,0,0.1);color:#ff9800}
 .feature-content h3{font-size:14px;font-weight:600;color:#fff;margin-bottom:4px}
 .feature-content p{font-size:12px;color:#8b949e;line-height:1.5}
-
-/* COINS */
 .coins-row{display:flex;gap:8px;overflow-x:auto;padding:10px 0;scrollbar-width:none}
 .coins-row::-webkit-scrollbar{display:none}
 .coin-pill{background:#0d1320;border:1px solid #1a2540;border-radius:20px;padding:8px 14px;display:flex;align-items:center;gap:6px;white-space:nowrap;flex-shrink:0}
 .coin-pill-icon{font-size:16px}
 .coin-pill-name{font-size:12px;font-weight:600;color:#e0e0e0}
 .coin-pill-price{font-size:11px;color:#22c55e}
-
-/* SPONSORS */
 .sponsors-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .sponsor-mini{background:#0d1320;border:1px solid #1a2540;border-radius:10px;padding:14px;text-align:center;text-decoration:none;transition:all 0.3s}
 .sponsor-mini:active{transform:scale(0.97);border-color:#00d4ff}
 .sponsor-mini-icon{font-size:28px;margin-bottom:6px}
 .sponsor-mini-name{font-size:11px;font-weight:600;color:#e0e0e0}
 .sponsor-mini-desc{font-size:9px;color:#8b949e;margin-top:2px}
-
-/* TIMER */
 .timer-section{padding:30px 20px;text-align:center}
 .timer-card{background:linear-gradient(135deg,#0d1320 0%,#101830 100%);border:1px solid #1a2540;border-radius:16px;padding:30px 20px;position:relative;overflow:hidden}
 .timer-card::before{content:'';position:absolute;top:-50%;right:-30%;width:200px;height:200px;background:radial-gradient(circle,rgba(0,212,255,0.1) 0%,transparent 70%)}
@@ -1142,8 +1124,6 @@ body{background:#0a0e17;color:#e0e0e0;font-family:'Segoe UI',-apple-system,Blink
 .claimed-text{font-size:13px;color:#8b949e;line-height:1.5;margin-bottom:20px}
 .claimed-reward{background:rgba(255,215,0,0.1);border:1px solid rgba(255,215,0,0.3);border-radius:10px;padding:10px;margin-bottom:20px}
 .claimed-reward strong{color:#ffd700;font-size:16px}
-
-/* FOOTER */
 .footer{margin-top:auto;background:#06090f;border-top:1px solid #1a2540;padding:25px 20px;text-align:center}
 .footer-logo{font-size:16px;font-weight:700;color:#00d4ff;margin-bottom:8px}
 .footer-text{font-size:11px;color:#555;line-height:1.6;margin-bottom:15px}
@@ -1152,111 +1132,100 @@ body{background:#0a0e17;color:#e0e0e0;font-family:'Segoe UI',-apple-system,Blink
 .footer-links a:active{color:#00d4ff}
 .footer-powered{font-size:10px;color:#444;border-top:1px solid #1a2540;padding-top:15px}
 .footer-powered a{color:#ffd700;text-decoration:none;font-weight:600}
-
-/* BACK BTN */
 .back-btn{display:flex;align-items:center;justify-content:center;gap:8px;background:rgba(255,215,0,0.1);border:1px solid rgba(255,215,0,0.3);color:#ffd700;padding:14px 20px;border-radius:12px;text-decoration:none;font-weight:700;font-size:14px;margin:0 20px 20px;transition:all 0.3s}
 .back-btn:active{transform:scale(0.97);background:rgba(255,215,0,0.2)}
-
-/* RESPONSIVE */
 @media(max-width:380px){.hero h1{font-size:26px}.stat-num{font-size:18px}.sponsors-grid{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
 <div class="container">
 
-  <!-- NAVBAR -->
   <nav class="navbar">
-    <div class="nav-logo">
-      <span>🔷</span> CryptoHub
-    </div>
-    <div class="nav-badge">PATROCINADOR OFICIAL</div>
+    <div class="nav-logo"><span>🔷</span> Plisio</div>
+    <div class="nav-badge">PASARELA OFICIAL</div>
   </nav>
 
-  <!-- HERO -->
   <section class="hero">
     <div class="hero-content">
-      <div class="hero-badge">⚡ Plataforma #1 en Cripto</div>
-      <h1>Compra, Vende y<br>Almacena Criptomonedas</h1>
-      <p>Únete a más de 2 millones de usuarios que ya confían en CryptoHub para sus transacciones diarias con las comisiones más bajas.</p>
-      <a href="https://example.com/cryptohub" target="_blank" class="hero-cta">🚀 Comenzar Ahora</a>
+      <div class="hero-badge">⚡ Pasarela de Pago #1 en Cripto</div>
+      <h1>Acepta Criptomonedas<br>en tu Negocio</h1>
+      <p>Plisio es la pasarela de pago que usa Kabuto Miner. Acepta más de 50 criptomonedas con las comisiones más bajas y retiros automáticos.</p>
+      <a href="https://plisio.net" target="_blank" class="hero-cta">🚀 Visitar Plisio.net</a>
     </div>
   </section>
 
-  <!-- STATS -->
   <div class="stats-bar">
-    <div class="stat"><div class="stat-num">2M+</div><div class="stat-label">Usuarios</div></div>
-    <div class="stat"><div class="stat-num">$5B</div><div class="stat-label">Volumen</div></div>
-    <div class="stat"><div class="stat-num">0.1%</div><div class="stat-label">Comisión</div></div>
+    <div class="stat"><div class="stat-num">50+</div><div class="stat-label">Criptomonedas</div></div>
+    <div class="stat"><div class="stat-num">0.5%</div><div class="stat-label">Comisión</div></div>
+    <div class="stat"><div class="stat-num">200+</div><div class="stat-label">Países</div></div>
   </div>
 
-  <!-- COINS -->
   <section class="section">
-    <h2 class="section-title">Precios en Tiempo Real</h2>
-    <p class="section-subtitle">Las criptomonedas más populares disponibles</p>
+    <h2 class="section-title">Criptomonedas Soportadas</h2>
+    <p class="section-subtitle">Acepta pagos en las principales criptomonedas</p>
     <div class="coins-row">
-      <div class="coin-pill"><span class="coin-pill-icon">🟢</span><span class="coin-pill-name">USDT</span><span class="coin-pill-price">$1.00</span></div>
-      <div class="coin-pill"><span class="coin-pill-icon">🟡</span><span class="coin-pill-name">BNB</span><span class="coin-pill-price">$412.50</span></div>
-      <div class="coin-pill"><span class="coin-pill-icon">☀️</span><span class="coin-pill-name">SOL</span><span class="coin-pill-price">$98.30</span></div>
-      <div class="coin-pill"><span class="coin-pill-icon">🪙</span><span class="coin-pill-name">LTC</span><span class="coin-pill-price">$72.15</span></div>
-      <div class="coin-pill"><span class="coin-pill-icon">🔴</span><span class="coin-pill-name">TRX</span><span class="coin-pill-price">$0.12</span></div>
-      <div class="coin-pill"><span class="coin-pill-icon">🐕</span><span class="coin-pill-name">DOGE</span><span class="coin-pill-price">$0.08</span></div>
-      <div class="coin-pill"><span class="coin-pill-icon">🔵</span><span class="coin-pill-name">USDC</span><span class="coin-pill-price">$1.00</span></div>
+      <div class="coin-pill"><span class="coin-pill-icon">🟢</span><span class="coin-pill-name">USDT</span></div>
+      <div class="coin-pill"><span class="coin-pill-icon">🟡</span><span class="coin-pill-name">BNB</span></div>
+      <div class="coin-pill"><span class="coin-pill-icon">☀️</span><span class="coin-pill-name">SOL</span></div>
+      <div class="coin-pill"><span class="coin-pill-icon">🪙</span><span class="coin-pill-name">LTC</span></div>
+      <div class="coin-pill"><span class="coin-pill-icon">🔴</span><span class="coin-pill-name">TRX</span></div>
+      <div class="coin-pill"><span class="coin-pill-icon">🐕</span><span class="coin-pill-name">DOGE</span></div>
+      <div class="coin-pill"><span class="coin-pill-icon">🔵</span><span class="coin-pill-name">USDC</span></div>
+      <div class="coin-pill"><span class="coin-pill-icon">💎</span><span class="coin-pill-name">TON</span></div>
+      <div class="coin-pill"><span class="coin-pill-icon">🟠</span><span class="coin-pill-name">ETH</span></div>
     </div>
   </section>
 
-  <!-- FEATURES -->
   <section class="section" style="padding-top:10px">
-    <h2 class="section-title">¿Por qué CryptoHub?</h2>
-    <p class="section-subtitle">La plataforma más segura y rápida del mercado</p>
+    <h2 class="section-title">¿Por qué Plisio?</h2>
+    <p class="section-subtitle">La pasarela de pago cripto más confiable</p>
     <div class="features-grid">
       <div class="feature">
         <div class="feature-icon blue">🔒</div>
-        <div class="feature-content"><h3>Seguridad de Nivel Bancario</h3><p>Cifrado AES-256, autenticación de dos factores y almacenamiento en frío para el 95% de los fondos.</p></div>
+        <div class="feature-content"><h3>Seguridad Garantizada</h3><p>Cifrado de nivel bancario, verificación de transacciones y protección contra fraudes.</p></div>
       </div>
       <div class="feature">
         <div class="feature-icon green">⚡</div>
-        <div class="feature-content"><h3>Transacciones Instantáneas</h3><p>Compra y vende en segundos. Retiros procesados en menos de 5 minutos.</p></div>
+        <div class="feature-content"><h3>Retiros Automáticos</h3><p>Los pagos se procesan automáticamente. Sin esperas, sin complicaciones.</p></div>
       </div>
       <div class="feature">
         <div class="feature-icon purple">💰</div>
-        <div class="feature-content"><h3>Comisiones Más Bajas</h3><p>Solo 0.1% por transacción. Sin comisiones ocultas. Sin costos de retiro en la mayoría de monedas.</p></div>
+        <div class="feature-content"><h3>Comisiones Bajas</h3><p>Solo 0.5% por transacción. Sin costos ocultos. Sin suscripciones mensuales.</p></div>
       </div>
       <div class="feature">
-        <div class="feature-icon orange">📱</div>
-        <div class="feature-content"><h3>App Móvil Disponible</h3><p>Disponible en iOS y Android. Gestiona tus criptomonedas desde cualquier lugar, en cualquier momento.</p></div>
+        <div class="feature-icon orange">🌐</div>
+        <div class="feature-content"><h3>API Fácil de Integrar</h3><p>Integra Plisio en tu web o app en minutos. Documentación clara y soporte 24/7.</p></div>
       </div>
     </div>
   </section>
 
-  <!-- SPONSORS -->
   <section class="section" style="padding-top:10px">
-    <h2 class="section-title">Nuestros Socios</h2>
-    <p class="section-subtitle">Plataformas confiables que recomendamos</p>
+    <h2 class="section-title">Casos de Uso</h2>
+    <p class="section-subtitle">Para quién es Plisio</p>
     <div class="sponsors-grid">
-      <a href="https://example.com/wallet" target="_blank" class="sponsor-mini">
-        <div class="sponsor-mini-icon">👛</div>
-        <div class="sponsor-mini-name">SafeWallet</div>
-        <div class="sponsor-mini-desc">Wallet segura</div>
-      </a>
-      <a href="https://example.com/games" target="_blank" class="sponsor-mini">
+      <div class="sponsor-mini">
         <div class="sponsor-mini-icon">🎮</div>
-        <div class="sponsor-mini-name">Play2Earn</div>
-        <div class="sponsor-mini-desc">Juegos crypto</div>
-      </a>
-      <a href="https://example.com/trade" target="_blank" class="sponsor-mini">
-        <div class="sponsor-mini-icon">📊</div>
-        <div class="sponsor-mini-name">TradePro</div>
-        <div class="sponsor-mini-desc">Trading tools</div>
-      </a>
-      <a href="https://example.com/stake" target="_blank" class="sponsor-mini">
-        <div class="sponsor-mini-icon">🌱</div>
-        <div class="sponsor-mini-name">StakePool</div>
-        <div class="sponsor-mini-desc">Staking rewards</div>
-      </a>
+        <div class="sponsor-mini-name">Juegos Play-to-Earn</div>
+        <div class="sponsor-mini-desc">Como Kabuto Miner</div>
+      </div>
+      <div class="sponsor-mini">
+        <div class="sponsor-mini-icon">🛒</div>
+        <div class="sponsor-mini-name">E-commerce</div>
+        <div class="sponsor-mini-desc">Tiendas online</div>
+      </div>
+      <div class="sponsor-mini">
+        <div class="sponsor-mini-icon">🎰</div>
+        <div class="sponsor-mini-name">Casinos Online</div>
+        <div class="sponsor-mini-desc">Apuestas crypto</div>
+      </div>
+      <div class="sponsor-mini">
+        <div class="sponsor-mini-icon">💼</div>
+        <div class="sponsor-mini-name">Freelancers</div>
+        <div class="sponsor-mini-desc">Cobra en cripto</div>
+      </div>
     </div>
   </section>
 
-  <!-- TIMER -->
   <section class="timer-section">
     <div id="timerCard" class="timer-card">
       <p class="timer-label">⏳ Confirmando tu visita...</p>
@@ -1273,30 +1242,24 @@ body{background:#0a0e17;color:#e0e0e0;font-family:'Segoe UI',-apple-system,Blink
     <div id="claimedCard" class="claimed-card">
       <div class="claimed-icon">✅</div>
       <h2 class="claimed-title">¡Visita Confirmada!</h2>
-      <p class="claimed-text">Has visitado a nuestro patrocinador oficial. Tu recompensa está lista para ser reclamada.</p>
-      <div class="claimed-reward">
-        <strong>+200 $KABUTO</strong>
-      </div>
+      <p class="claimed-text">Has visitado a nuestro patrocinador oficial: Plisio. Tu recompensa está lista.</p>
+      <div class="claimed-reward"><strong>+200 $KABUTO</strong></div>
     </div>
   </section>
 
-  <!-- BACK -->
-  <a href="https://t.me/Kabutominer_bot" class="back-btn">
-    🦏 Volver a Kabuto Miner
-  </a>
+  <a href="https://t.me/Kabutominer_bot" class="back-btn">🦏 Volver a Kabuto Miner</a>
 
-  <!-- FOOTER -->
   <footer class="footer">
-    <div class="footer-logo">🔷 CryptoHub</div>
-    <p class="footer-text">CryptoHub es una plataforma de intercambio de criptomonedas registrada. Operamos bajo estrictas normativas de seguridad y cumplimiento.</p>
+    <div class="footer-logo">🔷 Plisio</div>
+    <p class="footer-text">Plisio es una pasarela de pago en criptomonedas que permite a negocios de todo el mundo aceptar pagos digitales de forma segura y automática.</p>
     <div class="footer-links">
-      <a href="#">Términos</a>
-      <a href="#">Privacidad</a>
-      <a href="#">Seguridad</a>
-      <a href="#">Soporte</a>
+      <a href="https://plisio.net/documentation" target="_blank">API Docs</a>
+      <a href="https://plisio.net/faq" target="_blank">FAQ</a>
+      <a href="https://plisio.net/security" target="_blank">Seguridad</a>
+      <a href="https://plisio.net/contacts" target="_blank">Contacto</a>
     </div>
     <div class="footer-powered">
-      🔷 Patrocinador oficial de <a href="https://t.me/Kabutominer_bot">Kabuto Miner</a>
+      🔷 Pasarela de pago oficial de <a href="https://t.me/Kabutominer_bot">Kabuto Miner</a>
     </div>
   </footer>
 
@@ -1317,14 +1280,11 @@ body{background:#0a0e17;color:#e0e0e0;font-family:'Segoe UI',-apple-system,Blink
     const progress = (secondsLeft / totalSeconds) * circumference;
     timerProgress.style.strokeDashoffset = circumference - progress;
     timerNum.textContent = secondsLeft > 0 ? secondsLeft : '✓';
-
     if (secondsLeft <= 0) {
       clearInterval(interval);
       timerCard.style.display = 'none';
       claimedCard.classList.add('show');
-      if (tg) {
-        fetch('/api/sponsor_visit?tg=' + tg).catch(() => {});
-      }
+      if (tg) { fetch('/api/sponsor_visit?tg=' + tg).catch(() => {}); }
     }
   }, 1000);
 </script>
@@ -1336,7 +1296,7 @@ body{background:#0a0e17;color:#e0e0e0;font-family:'Segoe UI',-apple-system,Blink
 app.get('/api/sponsor_visit', async (req, res) => {
   try {
     const tg = req.query.tg;
-    if (tg) console.log('📢 Visita al patrocinador: ' + tg);
+    if (tg) console.log('📢 Visita a Plisio: ' + tg);
     res.json({ success: true });
   } catch (e) { res.json({ success: true }); }
 });
