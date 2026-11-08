@@ -239,7 +239,17 @@ function App() {
 
   async function handleClaimTask(task) {
     if (claimedTasks.includes(task.id)) return;
-    if (task.link) { if (window.Telegram?.WebApp) window.Telegram.WebApp.openTelegramLink(task.link); else window.open(task.link, '_blank'); }
+    if (task.link) {
+      if (window.Telegram?.WebApp) {
+        if (task.link.startsWith('https://t.me')) {
+          window.Telegram.WebApp.openTelegramLink(task.link);
+        } else {
+          window.Telegram.WebApp.openLink(task.link);
+        }
+      } else {
+        window.open(task.link, '_blank');
+      }
+    }
     try {
       const r = await fetch(`${API_URL}/api/complete_task`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ telegram_id: user.telegram_id, task_id: task.id, reward: task.reward }) });
       const data = await r.json();
