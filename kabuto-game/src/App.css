@@ -409,3 +409,173 @@ body {
     height: 40px;
   }
 }
+/* =====================================================
+   FIX: ICONOS MÁS GRANDES
+   =====================================================
+   Reemplaza estas clases en tu App.css actual.
+   Busca cada clase y cámbiala por esta versión.
+   ===================================================== */
+
+/* ============== ICONOS DE TAREAS (más grandes) ============== */
+/* ANTES: 60x60 → AHORA: 90x90 */
+.task-icon-img {
+  width: 90px;
+  height: 90px;
+  object-fit: contain;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 12px;
+  padding: 6px;
+  flex-shrink: 0;
+}
+
+.task-icon-fallback {
+  width: 90px;
+  height: 90px;
+  font-size: 48px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 12px;
+  flex-shrink: 0;
+}
+
+/* ============== BONUS DIARIO ICON (más grande) ============== */
+/* ANTES: 50x50 → AHORA: 80x80 */
+.daily-bonus-icon {
+  width: 80px;
+  height: 80px;
+  object-fit: contain;
+  flex-shrink: 0;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 4px;
+}
+
+.daily-bonus-icon-fallback {
+  display: none;
+}
+
+/* ============== RULETA ICON (más grande) ============== */
+/* ANTES: 50x50 → AHORA: 80x80 */
+.roulette-icon {
+  width: 80px;
+  height: 80px;
+  object-fit: contain;
+  flex-shrink: 0;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.2);
+  padding: 4px;
+}
+
+.roulette-icon-fallback {
+  display: none;
+}
+
+/* ============== ICONOS DE CRIPTOMONEDAS (más grandes) ============== */
+/* ANTES: 28x28 → AHORA: 44x44 */
+.currency-icon-img {
+  width: 44px;
+  height: 44px;
+  object-fit: contain;
+  display: block;
+  margin: 0 auto;
+}
+
+/* Botón de moneda más grande para que quepa */
+.currency-btn {
+  background: rgba(13, 17, 23, 0.8);
+  border: 1px solid #30363d;
+  border-radius: 8px;
+  padding: 10px 4px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.2s;
+  color: #fff;
+}
+
+/* Texto de moneda más legible */
+.currency-code {
+  font-size: 10px;
+  font-weight: bold;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+  text-align: center;
+  margin-top: 2px;
+}
+
+/* ============== ICONOS VIP (más grandes) ============== */
+/* ANTES: 80x80 → AHORA: 100x100 */
+.upgrade-emoji, .task-icon {
+  width: 100px;
+  height: 100px;
+  object-fit: contain;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 12px;
+  padding: 6px;
+  font-size: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* ============== ICONOS DE LOGROS (más grandes) ============== */
+/* ANTES: 30px → AHORA: 44px */
+.achievement-icon {
+  font-size: 44px;
+  flex-shrink: 0;
+  width: 50px;
+  height: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ============== AVATAR (más grande en header) ============== */
+/* ANTES: 45x45 → AHORA: 55x55 */
+.avatar {
+  width: 55px;
+  height: 55px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid #ffd700;
+  box-shadow: 0 0 10px rgba(255, 215, 0, 0.3);
+  flex-shrink: 0;
+}
+
+/* ============== RESPONSIVE ============== */
+@media (max-width: 380px) {
+  .task-icon-img, .task-icon-fallback {
+    width: 70px;
+    height: 70px;
+    font-size: 36px;
+  }
+  .daily-bonus-icon, .roulette-icon {
+    width: 60px;
+    height: 60px;
+  }
+  .currency-icon-img {
+    width: 36px;
+    height: 36px;
+  }
+  .upgrade-emoji, .task-icon {
+    width: 80px;
+    height: 80px;
+    font-size: 40px;
+  }
+  .achievement-icon {
+    font-size: 36px;
+    width: 40px;
+    height: 40px;
+  }
+  .avatar {
+    width: 45px;
+    height: 45px;
+  }
+}
